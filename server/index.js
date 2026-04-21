@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import authRoutes from './routes/auth.routes.js';
 import studiosRoutes from './routes/studios.routes.js';
 import cookiesRoutes from './routes/cookies.routes.js';
+import { startCronJobs } from './services/cron/jobScheduler.js';
 
 dotenv.config();
 
@@ -32,4 +33,7 @@ app.use((err, req, res, next) => {
 
 app.listen(PORT, () => {
   console.log(`🚀 [Server] Backend Express berjalan di http://localhost:${PORT}`);
+  
+  // Menyalakan robot chron jobs
+  startCronJobs();
 });

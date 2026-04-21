@@ -3,10 +3,13 @@ import ReactDOM from 'react-dom/client'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import './index.css'
 import { MainLayout } from './components/layout/MainLayout'
+import { ProtectedRoute } from './components/layout/ProtectedRoute'
+import { useAuthStore } from './store/useAuthStore'
 import { HomeDashboard } from './pages/HomeDashboard'
 import { ServerPerformance } from './pages/ServerPerformance'
 import { ListStudio } from './pages/ListStudio'
 import { DetailStudio } from './pages/DetailStudio'
+import { DetailTokoProduk } from './pages/DetailTokoProduk'
 import { InputMember } from './pages/InputMember'
 import { InputToko } from './pages/InputToko'
 import { InputCookies } from './pages/InputCookies'
@@ -34,14 +37,26 @@ const PlaceholderPage = ({ title }) => (
 
 // Protected route wrapper stub
 const AppRouter = () => {
+  // Logic untuk memeriksa apakah user sudah login agar tidak bisa buka halaman login lagi
+  const ProtectedLoginRoute = ({ children }) => {
+    const { isAuthenticated } = useAuthStore();
+    if (isAuthenticated) return <Navigate to="/" replace />;
+    return children;
+  };
+
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/login" element={<Login />} />
+        <Route path="/login" element={
+          <ProtectedLoginRoute>
+            <Login />
+          </ProtectedLoginRoute>
+        } />
         
-        {/* Main Application Routes inside Layout */}
-        <Route element={<MainLayout />}>
-          <Route path="/" element={<Navigate to="/home" replace />} />
+        {/* Main Application Routes inside Layout that are Protected */}
+        <Route element={<ProtectedRoute />}>
+          <Route element={<MainLayout />}>
+            <Route path="/" element={<Navigate to="/home" replace />} />
           <Route path="/home" element={<HomeDashboard />} />
           <Route path="/input-member" element={<InputMember />} />
           <Route path="/input-toko" element={<InputToko />} />
@@ -53,6 +68,7 @@ const AppRouter = () => {
           <Route path="/performa-server" element={<ServerPerformance />} />
           <Route path="/list-studio" element={<ListStudio />} />
           <Route path="/list-studio/:id" element={<DetailStudio />} />
+          <Route path="/list-studio/:id/produk" element={<DetailTokoProduk />} />
           <Route path="/cookies-expired" element={<ExpiredCookies />} />
           <Route path="/treatment-manual" element={<TreatmentManual />} />
           <Route path="/set-studio" element={<SetStudio />} />
@@ -62,6 +78,7 @@ const AppRouter = () => {
           
           {/* Fallback */}
           <Route path="*" element={<NotFound />} />
+        </Route>
         </Route>
       </Routes>
     </BrowserRouter>

@@ -65,4 +65,31 @@ router.post('/', async (req, res) => {
   }
 });
 
+/**
+ * PATCH /api/studios/:id/share
+ * Endpoint untuk mengubah status "Share ON/OFF" pada spesifik Studio
+ */
+router.patch('/:id/share', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { is_share_on } = req.body;
+
+    if (typeof is_share_on !== 'boolean') {
+      return res.status(400).json({ error: 'Nilai is_share_on wajib bertipe boolean.' });
+    }
+
+    const updatedStudio = await prisma.studio.update({
+      where: { id },
+      data: {
+        is_share_on,
+      },
+    });
+
+    res.status(200).json({ data: updatedStudio, message: 'Status Sinkronisasi Share Berhasil Diubah.' });
+  } catch (error) {
+    console.error('Error updating studio share status:', error);
+    res.status(500).json({ error: 'Gagal memperbarui status share studio.' });
+  }
+});
+
 export default router;

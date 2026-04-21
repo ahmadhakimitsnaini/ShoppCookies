@@ -21,4 +21,24 @@ export const useStudioStore = create((set) => ({
       });
     }
   },
+
+  toggleShare: async (id, is_share_on) => {
+    try {
+      await fetchApi(`/api/studios/${id}/share`, {
+        method: 'PATCH',
+        body: JSON.stringify({ is_share_on })
+      });
+      // Update local state directly to be snappy
+      set((state) => ({
+        studios: state.studios.map(studio => 
+          studio.id === id ? { ...studio, is_share_on } : studio
+        )
+      }));
+    } catch (error) {
+      set({ error: error.message });
+      // Reload from server if optimistic update fails
+      const currentStudios = useStudioStore.getState().studios;
+      set({ studios: [...currentStudios] }); 
+    }
+  },
 }));
