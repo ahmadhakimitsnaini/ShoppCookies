@@ -1,0 +1,41 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+@layer base {
+  body {
+    @apply bg-gk-background text-gk-text-main font-sans antialiased;
+  }
+  
+  h1 { @apply text-h1 font-bold; }
+  h2 { @apply text-h2 font-semibold; }
+  h3 { @apply text-h3 font-semibold; }
+  p { @apply text-body; }
+  small { @apply text-small text-gk-text-muted; }
+  .caption { @apply text-caption text-gk-text-muted; }
+}
+
+@layer components {
+  /* Basic transitions for UI elements */
+  .transition-standard {
+    @apply transition-all duration-200 ease-in-out;
+  }
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #F9FAFB; 
+}
+::-webkit-scrollbar-thumb {
+  background: #E5E7EB; 
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #9CA3AF; 
+}
