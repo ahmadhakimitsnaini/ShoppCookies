@@ -1,0 +1,196 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js" // Changed from prisma-client to standard prisma-client-js
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================================
+// ENUM TYPES
+// ============================================================
+
+enum UserRole {
+  ADMIN
+  OPERATOR
+
+  @@map("user_role")
+}
+
+enum StudioStatus {
+  ACTIVE
+  MAINTENANCE
+
+  @@map("studio_status")
+}
+
+enum AccountStatus {
+  ACTIVE
+  INACTIVE
+  BANNED
+
+  @@map("account_status")
+}
+
+enum AccountHealth {
+  EXCELLENT
+  WARNING
+  CRITICAL
+
+  @@map("account_health")
+}
+
+enum SessionStatus {
+  LIVE
+  OFFLINE
+  EXPIRED
+
+  @@map("session_status")
+}
+
+enum BotTaskType {
+  SYNC_OMZET
+  AUTO_TREATMENT
+  STOP_LIVE
+  CHECK_COOKIE
+
+  @@map("bot_task_type")
+}
+
+enum BotTaskStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+
+  @@map("bot_task_status")
+}
+
+// ============================================================
+// MODELS
+// ============================================================
+
+model User {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email         String   @unique @db.VarChar(255)
+  password_hash String   @db.VarChar(255)
+  role          UserRole @default(OPERATOR)
+  created_at    DateTime @default(now()) @db.Timestamptz
+  updated_at    DateTime @updatedAt @db.Timestamptz
+
+  @@map("users")
+}
+
+model Member {
+  id                  String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name                String          @db.VarChar(255)
+  phone               String          @unique @db.VarChar(30)
+  email               String?         @unique @db.VarChar(255)
+  bank_name           String?         @db.VarChar(100)
+  bank_account_number String?         @db.VarChar(50)
+  joined_at           DateTime        @default(now()) @db.Timestamptz
+  updated_at          DateTime        @updatedAt @db.Timestamptz
+  deleted_at          DateTime?       @db.Timestamptz
+  shopee_accounts     ShopeeAccount[]
+
+  @@map("members")
+}
+
+model Studio {
+  id              String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name            String          @unique @db.VarChar(150)
+  status          StudioStatus    @default(ACTIVE)
+  created_at      DateTime        @default(now()) @db.Timestamptz
+  updated_at      DateTime        @updatedAt @db.Timestamptz
+  shopee_accounts ShopeeAccount[]
+
+  @@map("studios")
+}
+
+model ShopeeAccount {
+  id               String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  member_id        String          @db.Uuid
+  studio_id        String?         @db.Uuid
+  shopee_username  String          @unique @db.VarChar(100)
+  shopee_shop_name String          @db.VarChar(255)
+  status           AccountStatus   @default(ACTIVE)
+  health_status    AccountHealth   @default(EXCELLENT)
+  total_sessions   Int             @default(0)
+  created_at       DateTime        @default(now()) @db.Timestamptz
+  updated_at       DateTime        @updatedAt @db.Timestamptz
+  deleted_at       DateTime?       @db.Timestamptz
+
+  member           Member          @relation(fields: [member_id], references: [id], onDelete: Restrict)
+  studio           Studio?         @relation(fields: [studio_id], references: [id], onDelete: SetNull)
+  sessions         ShopeeSession[]
+  performances     LivePerformance[]
+  violations       AccountViolation[]
+  bot_tasks        BotTask[]
+
+  @@map("shopee_accounts")
+}
+
+model ShopeeSession {
+  id                   String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  account_id           String          @db.Uuid
+  raw_cookie_encrypted String          @db.Text
+  user_agent           String          @db.Text
+  status               SessionStatus   @default(LIVE)
+  health_score         Int             @default(100) @db.SmallInt
+  last_sync_at         DateTime        @default(now()) @db.Timestamptz
+  expired_at           DateTime?       @db.Timestamptz
+  created_at           DateTime        @default(now()) @db.Timestamptz
+  updated_at           DateTime        @updatedAt @db.Timestamptz
+
+  account              ShopeeAccount   @relation(fields: [account_id], references: [id], onDelete: Cascade)
+  performances         LivePerformance[]
+
+  @@map("shopee_sessions")
+}
+
+model LivePerformance {
+  id           String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  account_id   String         @db.Uuid
+  session_id   String?        @db.Uuid
+  live_title   String?        @db.VarChar(255)
+  viewers      Int            @default(0)
+  buyers       Int            @default(0)
+  omzet_live   Decimal        @default(0.00) @db.Decimal(18, 2)
+  omzet_komisi Decimal        @default(0.00) @db.Decimal(18, 2)
+  recorded_at  DateTime       @default(now()) @db.Timestamptz
+
+  account      ShopeeAccount  @relation(fields: [account_id], references: [id], onDelete: Cascade)
+  session      ShopeeSession? @relation(fields: [session_id], references: [id], onDelete: SetNull)
+
+  @@map("live_performances")
+}
+
+model AccountViolation {
+  id             String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  account_id     String        @db.Uuid
+  violation_type String        @db.VarChar(100)
+  description    String?       @db.Text
+  detected_at    DateTime      @default(now()) @db.Timestamptz
+
+  account        ShopeeAccount @relation(fields: [account_id], references: [id], onDelete: Cascade)
+
+  @@map("account_violations")
+}
+
+model BotTask {
+  id          String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  account_id  String        @db.Uuid
+  task_type   BotTaskType
+  status      BotTaskStatus @default(PENDING)
+  payload     Json?         @default("{}")
+  created_at  DateTime      @default(now()) @db.Timestamptz
+  executed_at DateTime?     @db.Timestamptz
+  finished_at DateTime?     @db.Timestamptz
+
+  account     ShopeeAccount @relation(fields: [account_id], references: [id], onDelete: Cascade)
+
+  @@map("bot_tasks")
+}

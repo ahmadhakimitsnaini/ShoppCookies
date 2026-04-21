@@ -58,3 +58,5 @@ dist-ssr
 # Database (Future proofing for Prisma / local SQLite if any)
 *.sqlite
 *.db
+
+/src/generated/prisma
