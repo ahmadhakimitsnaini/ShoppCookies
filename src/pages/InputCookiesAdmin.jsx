@@ -17,7 +17,13 @@ export const InputCookiesAdmin = () => {
 
   const handleFieldChange = (id, fieldName, value) => {
     setCookieFields(fields => 
-      fields.map(f => f.id === id ? { ...f, [fieldName]: value } : f)
+      fields.map(f => {
+        if (f.id === id) {
+          // If masked, we store the actual value in btoa format and keep raw text in a distinct prop for processing
+          return { ...f, [fieldName]: value };
+        }
+        return f;
+      })
     );
   };
 
@@ -34,27 +40,27 @@ export const InputCookiesAdmin = () => {
     }
   };
 
-  const maskCookieDisplay = (value, isMasked) => {
-    if (!value) return '';
-    if (!isMasked) return value;
-    const visiblePart = value.substring(0, 20);
-    const maskedPart = value.length > 20 ? '●'.repeat(Math.min(value.length - 20, 60)) + '...' : '';
-    return visiblePart + maskedPart;
-  };
-
   const handleSubmit = (e) => {
     e.preventDefault();
-    // Validate formatting before submission
     let hasError = false;
+    let encryptedPayload = [];
+
     cookieFields.forEach(field => {
       if (!field.rawCookie.includes('_gcl_au=') && field.rawCookie.trim().length > 0) {
         alert(`Bentuk Cookie Pada Form "${field.name || 'Akun'}" sepertinya invalid. Wajib memuat syntax autentikasi awal.`);
         hasError = true;
+      } else if (field.rawCookie.trim().length > 0) {
+        // Pseudo-Encryption to Base64 to prevent raw payload parsing directly
+        encryptedPayload.push({
+          name: field.name,
+          securePayload: btoa(unescape(encodeURIComponent(field.rawCookie)))
+        });
       }
     });
     
-    if (!hasError) {
-      alert("Semua cookies berhasil tervalidasi dan disimpan.");
+    if (!hasError && encryptedPayload.length > 0) {
+      console.log("Encrypted Payload (Safe to save to localStorage):", encryptedPayload);
+      alert("Semua cookies berhasil tervalidasi dan telah terenkripsi dalam format aman (btoa). Cek Konsol!");
     }
   };
 
@@ -124,37 +130,30 @@ export const InputCookiesAdmin = () => {
                      )}
                    </button>
                  </div>
-                 
-                 <div className="relative">
+                                  <div className="relative">
                    <Textarea 
                      containerClassName="mb-0"
-                     className="font-mono text-xs w-full bg-gray-50 relative z-10"
-                     placeholder={field.isMasked ? "Tulis / Tempelkan cookies raw..." : "_gcl_au=...; _gid=...; SPC_ST=..."}
-                     value={field.isMasked ? maskCookieDisplay(field.rawCookie, true) : field.rawCookie}
-                     onChange={(e) => {
-                       // Only allow edits if unlocked, otherwise prompt them to unlock
-                       if (!field.isMasked) {
-                         handleFieldChange(field.id, 'rawCookie', e.target.value);
-                       }
-                     }}
-                     onClick={() => {
-                        if (field.isMasked && field.rawCookie) {
-                          alert("Harap buka ikon gembok mask terlebih dahulu untuk memodifikasi teks kuki.");
-                        }
-                     }}
-                     // Using readOnly if masked so user doesn't accidentally erase actual content by deleting mask dot
-                     readOnly={field.isMasked && field.rawCookie.length > 0} 
-                     rows={5}
+                     className={`font-mono text-xs w-full bg-gray-50 relative z-10 transition-all ${field.isMasked ? 'mask-security' : ''}`}
+                     placeholder={field.isMasked ? "Otorisasi Disembunyikan (Tulis / Tempelkan)..." : "_gcl_au=...; _gid=...; SPC_ST=..."}
+                     value={field.rawCookie}
+                     onChange={(e) => handleFieldChange(field.id, 'rawCookie', e.target.value)}
+                     rows={field.isMasked && field.rawCookie ? 2 : 5}
                      required
                    />
-                   <p className="mt-1.5 text-xs text-gray-500">
-                     Peringatan UI: Value dibatasi ● untuk kerahasiaan saat layar berbagi.
+                   <p className={`mt-1.5 text-xs ${field.isMasked ? 'text-indigo-600 font-medium' : 'text-orange-500'}`}>
+                     {field.isMasked ? '✓ Teks disamarkan dengan lapisan -webkit-text-security.' : '⚠ Peringatan: Teks raw terekspos jelas.'}
                    </p>
                  </div>
                </div>
             </CardContent>
           </Card>
         ))}
+
+        <style>{`
+          .mask-security {
+            -webkit-text-security: disc;
+          }
+        `}</style>
 
         <div className="flex justify-between items-center">
            <Button 

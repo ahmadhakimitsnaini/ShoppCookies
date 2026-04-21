@@ -1,45 +1,48 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, Outlet } from 'react-router-dom';
 import { 
   Menu, X, LayoutDashboard, MonitorPlay, Cookie, Settings, 
   Smartphone, ListTodo, Activity, AlertCircle, RefreshCw, 
   User, LogOut, ChevronDown, Bell, Search
 } from 'lucide-react';
 import { Badge } from '../ui/Badge';
+import { useUIStore } from '../../store/useUIStore';
 
-export const MainLayout = ({ children }) => {
-  const [isSidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 1024);
-  const [isNotifOpen, setIsNotifOpen] = useState(false);
-  const [isNavigating, setIsNavigating] = useState(false);
-  
+export const MainLayout = () => {
+  const { isSidebarOpen, setSidebarOpen, isNotifOpen, setNotifOpen, isNavigating, setNavigating, toggleSidebar, updateViewport } = useUIStore();
   const location = useLocation();
 
   // Handle route change for progress bar
   useEffect(() => {
-    setIsNavigating(true);
-    const timer = setTimeout(() => setIsNavigating(false), 500);
+    setNavigating(true);
+    const timer = setTimeout(() => setNavigating(false), 500);
     
     // Automatically close sidebar on mobile if navigating
     if (window.innerWidth < 1024) {
       setSidebarOpen(false);
     }
     return () => clearTimeout(timer);
-  }, [location.pathname]);
+  }, [location.pathname, setNavigating, setSidebarOpen]);
 
   useEffect(() => {
+    // Sync viewport resizes
+    const handleResize = () => updateViewport();
+    window.addEventListener('resize', handleResize);
+    
     // Handle Ctrl+K shortcut
     const handleKeyDown = (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
         e.preventDefault();
-        // simulate focus search
         alert('Global Search mock triggered. (Ctrl+K)');
       }
     };
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
-
-  const toggleSidebar = () => setSidebarOpen(!isSidebarOpen);
+    
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [updateViewport]);
 
   const menuItems = [
     { section: 'MENU MEMBER' },
@@ -165,7 +168,7 @@ export const MainLayout = ({ children }) => {
           <div className="flex items-center space-x-3">
             {/* Notification Bell */}
             <div className="relative">
-              <button onClick={() => setIsNotifOpen(!isNotifOpen)} className="p-2 text-gray-400 hover:bg-gray-100 rounded-full transition-colors relative">
+              <button onClick={() => setNotifOpen(!isNotifOpen)} className="p-2 text-gray-400 hover:bg-gray-100 rounded-full transition-colors relative">
                 <span className="absolute top-1.5 right-1.5 block h-2 w-2 rounded-full bg-red-500 ring-2 ring-white"></span>
                 <Bell size={20} />
               </button>
@@ -217,9 +220,9 @@ export const MainLayout = ({ children }) => {
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 overflow-x-hidden overflow-y-auto p-4 md:p-6 lg:p-8 pb-24">
+        <main className="flex-1 overflow-x-hidden overflow-y-auto p-4 md:p-6 lg:p-8 pb-24 relative">
           <div className="max-w-[1600px] mx-auto w-full">
-            {children}
+            <Outlet />
           </div>
         </main>
       </div>
