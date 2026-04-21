@@ -40,27 +40,29 @@ const AppRouter = () => {
         <Route path="/login" element={<Login />} />
         
         {/* Main Application Routes inside Layout */}
-        <Route path="/" element={<Navigate to="/home" replace />} />
-        <Route path="/home" element={<MainLayout><HomeDashboard /></MainLayout>} />
-        <Route path="/input-member" element={<MainLayout><InputMember /></MainLayout>} />
-        <Route path="/input-toko" element={<MainLayout><InputToko /></MainLayout>} />
-        <Route path="/input-cookies" element={<MainLayout><InputCookies /></MainLayout>} />
-        <Route path="/input-cookies-admin" element={<MainLayout><InputCookiesAdmin /></MainLayout>} />
-        <Route path="/pindah-hp" element={<MainLayout><PindahHp /></MainLayout>} />
-        <Route path="/list-akun" element={<MainLayout><ListAkunTreatment /></MainLayout>} />
-        <Route path="/treatment-auto" element={<MainLayout><TreatmentAuto /></MainLayout>} />
-        <Route path="/performa-server" element={<MainLayout><ServerPerformance /></MainLayout>} />
-        <Route path="/list-studio" element={<MainLayout><ListStudio /></MainLayout>} />
-        <Route path="/list-studio/:id" element={<MainLayout><DetailStudio /></MainLayout>} />
-        <Route path="/cookies-expired" element={<MainLayout><ExpiredCookies /></MainLayout>} />
-        <Route path="/treatment-manual" element={<MainLayout><TreatmentManual /></MainLayout>} />
-        <Route path="/set-studio" element={<MainLayout><SetStudio /></MainLayout>} />
-        <Route path="/cek-omzet" element={<MainLayout><CekOmzet /></MainLayout>} />
-        <Route path="/laporan-treatment" element={<MainLayout><PlaceholderPage title="Laporan Treatment" /></MainLayout>} />
-        <Route path="/input-bank-produk" element={<MainLayout><InputDataBank /></MainLayout>} />
-        
-        {/* Fallback */}
-        <Route path="*" element={<MainLayout><NotFound /></MainLayout>} />
+        <Route element={<MainLayout />}>
+          <Route path="/" element={<Navigate to="/home" replace />} />
+          <Route path="/home" element={<HomeDashboard />} />
+          <Route path="/input-member" element={<InputMember />} />
+          <Route path="/input-toko" element={<InputToko />} />
+          <Route path="/input-cookies" element={<InputCookies />} />
+          <Route path="/input-cookies-admin" element={<InputCookiesAdmin />} />
+          <Route path="/pindah-hp" element={<PindahHp />} />
+          <Route path="/list-akun" element={<ListAkunTreatment />} />
+          <Route path="/treatment-auto" element={<TreatmentAuto />} />
+          <Route path="/performa-server" element={<ServerPerformance />} />
+          <Route path="/list-studio" element={<ListStudio />} />
+          <Route path="/list-studio/:id" element={<DetailStudio />} />
+          <Route path="/cookies-expired" element={<ExpiredCookies />} />
+          <Route path="/treatment-manual" element={<TreatmentManual />} />
+          <Route path="/set-studio" element={<SetStudio />} />
+          <Route path="/cek-omzet" element={<CekOmzet />} />
+          <Route path="/laporan-treatment" element={<PlaceholderPage title="Laporan Treatment" />} />
+          <Route path="/input-bank-produk" element={<InputDataBank />} />
+          
+          {/* Fallback */}
+          <Route path="*" element={<NotFound />} />
+        </Route>
       </Routes>
     </BrowserRouter>
   );
