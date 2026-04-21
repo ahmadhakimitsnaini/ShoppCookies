@@ -1,12 +1,22 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { StatCard, StudioCard, Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card';
 import { Table } from '../components/ui/Table';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Badge } from '../components/ui/Badge';
-import { DollarSign, Users, Activity, Target, Plus, Search, AlertCircle } from 'lucide-react';
+import { DollarSign, Users, Activity, Target, Plus, Search, AlertCircle, RefreshCw } from 'lucide-react';
+import { useStudioStore } from '../store/useStudioStore';
 
 export const Dashboard = () => {
+  const { studios, isLoading, fetchStudios } = useStudioStore();
+
+  useEffect(() => {
+    fetchStudios();
+  }, []);
+
+  const totalOmzetUser = "Rp 0"; // TODO: Aggregation of actual revenue if available in Studio model
+  const activeStudiosCount = studios.filter(s => s.status === 'ACTIVE').length;
+  const liveSessionsCount = studios.reduce((acc, curr) => acc + (curr.totalLiveSessions || 0), 0);
   return (
     <div className="space-y-6">
       {/* Header section */}
@@ -16,8 +26,13 @@ export const Dashboard = () => {
           <p className="text-gk-text-muted mt-1">Pantau performa seluruh studio live streaming Anda</p>
         </div>
         <div className="mt-4 sm:mt-0 flex space-x-3">
-          <Button variant="secondary" leftIcon={<Activity size={18} />}>
-            Refresh Data
+          <Button 
+            variant="secondary" 
+            leftIcon={<RefreshCw size={18} className={isLoading ? "animate-spin" : ""} />}
+            onClick={() => fetchStudios()}
+            disabled={isLoading}
+          >
+            {isLoading ? "Memuat..." : "Refresh Data"}
           </Button>
           <Button leftIcon={<Plus size={18} />}>
             Tambah Studio
@@ -36,10 +51,10 @@ export const Dashboard = () => {
         />
         <StatCard 
           title="Studio Aktif / Live" 
-          value="45 / 38" 
+          value={`${activeStudiosCount} / ${liveSessionsCount}`} 
           icon={<Target size={24} />} 
-          trend="up" 
-          trendValue="+3" 
+          trend="neutral" 
+          trendValue="Data Real-Time" 
         />
         <StatCard 
           title="Total Klik" 
@@ -81,14 +96,18 @@ export const Dashboard = () => {
                   { header: 'Cookies', cell: (row) => <Badge status={row.cookiesStatus === 'Aman' ? 'AMAN' : 'EXPIRED'} /> },
                   { header: 'Aksi', cell: () => <Button variant="ghost" size="sm">Detail</Button> }
                 ]}
-                data={[
-                   { name: 'Studio Kosmetik A', status: 'LIVE', revenue: 'Rp 45.2M', clicks: '124k', cookiesStatus: 'Aman' },
-                   { name: 'Studio Fashion Mix', status: 'LIVE', revenue: 'Rp 38.1M', clicks: '98k', cookiesStatus: 'Aman' },
-                   { name: 'Elektronik Center', status: 'OFFLINE', revenue: 'Rp 22.4M', clicks: '45k', cookiesStatus: 'Expired' },
-                   { name: 'Gudang Promo 99', status: 'LIVE', revenue: 'Rp 19.8M', clicks: '88k', cookiesStatus: 'Aman' },
-                ]}
+                data={studios.map(studio => ({
+                   name: studio.name,
+                   status: studio.status,
+                   revenue: 'Rp 0', // Placeholder until revenue tracking is added
+                   clicks: '-',
+                   cookiesStatus: studio.activeAccountsCount > 0 ? 'Aman' : 'Expired'
+                }))}
                 className="border-0 shadow-none rounded-none"
               />
+              {studios.length === 0 && !isLoading && (
+                <div className="p-8 text-center text-gray-500">Belum ada data studio. Coba jalankan cURL POST Anda.</div>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -127,10 +146,12 @@ export const Dashboard = () => {
 
           <h3 className="text-h3 font-semibold text-gk-text-main mt-8 mb-4">Akses Cepat</h3>
           <div className="grid grid-cols-2 gap-4">
-             <StudioCard name="Studio Kosmetik A" status="LIVE" revenue="Rp 45.2M" />
-             <StudioCard name="Studio Fashion Mix" status="LIVE" revenue="Rp 38.1M" />
-             <StudioCard name="Elektronik Center" status="OFFLINE" revenue="Rp 22.4M" />
-             <StudioCard name="Gudang Promo 99" status="LIVE" revenue="Rp 19.8M" />
+             {studios.slice(0, 4).map((studio) => (
+               <StudioCard key={studio.id} name={studio.name} status={studio.status} revenue="Rp 0" />
+             ))}
+             {studios.length === 0 && (
+               <div className="col-span-2 text-sm text-gray-400">Tidak ada studio aktif</div>
+             )}
           </div>
         </div>
       </div>

@@ -2,19 +2,22 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
+import { useAuthStore } from '../store/useAuthStore';
 
 export const Login = () => {
-  const [loading, setLoading] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const navigate = useNavigate();
+  
+  const { login, isLoading, error, clearError } = useAuthStore();
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
-    setLoading(true);
-    // Mock login delay
-    setTimeout(() => {
-      setLoading(false);
+    clearError();
+    const success = await login(email, password);
+    if (success) {
       navigate('/');
-    }, 1500);
+    }
   };
 
   return (
@@ -35,10 +38,18 @@ export const Login = () => {
               <p className="text-sm text-gray-500 mb-6">Silakan masukkan kredensial Anda untuk melanjutkan</p>
             </div>
             
+            {error && (
+              <div className="p-3 mb-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg">
+                {error}
+              </div>
+            )}
+
             <Input 
               label="Username / Email" 
               placeholder="Masukkan username atau email" 
               autoComplete="username"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               required 
             />
             
@@ -48,6 +59,8 @@ export const Login = () => {
                 label="Password" 
                 placeholder="••••••••" 
                 autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
                 required 
               />
               <div className="flex justify-end mt-1">
@@ -60,7 +73,7 @@ export const Login = () => {
             <Button 
               type="submit" 
               className="w-full py-2.5 shadow-md shadow-gk-primary/20" 
-              isLoading={loading}
+              isLoading={isLoading}
               size="lg"
             >
               Masuk
