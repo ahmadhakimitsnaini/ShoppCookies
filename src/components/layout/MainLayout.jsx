@@ -87,7 +87,7 @@ export const MainLayout = ({ children }) => {
         <div className="h-[60px] flex items-center justify-between border-b border-gray-800 px-4">
            {isSidebarOpen ? (
              <h1 className="text-xl font-bold bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent truncate">
-               GudangKreatif
+               ShopCookies
              </h1>
            ) : (
              <span className="text-2xl font-bold text-emerald-400 w-full text-center">GK</span>

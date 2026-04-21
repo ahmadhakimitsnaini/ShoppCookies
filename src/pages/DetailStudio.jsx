@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Card, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Skeleton } from '../components/ui/Skeleton';
-import { ArrowLeft, ExternalLink } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Download, StopCircle, RefreshCw, XCircle, Tag, ShieldAlert } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
 export const DetailStudio = () => {
@@ -65,6 +65,45 @@ export const DetailStudio = () => {
       <h3 className={`text-2xl font-bold ${textColor}`}>{value}</h3>
     </div>
   );
+
+  const mockTableData = [
+    {
+      id: "S_014",
+      status: {
+        isLive: true,
+        etalaseCount: 245,
+        health: { sessions: 112, pel: 1, value: 3, warning: "Host Tidak Muncul Saat Live Streaming" }
+      },
+      namaToko: "Gudang Promo VIP",
+      judulLive: "GEBYAR DISKON GILA-GILAAN KOSMETIK IMPORT TERBARU!",
+      omzetLive: { omzet: "Rp 12.4M", jam: "04:30", rasio: "Rp 2.8M/j" },
+      omzetSeb: { omzet: "Rp 8.5M", jam: "05:00", rasio: "Rp 1.7M/j" },
+      penonton: 1840,
+      pembeli: 310,
+      komisi: "Rp 1.2M",
+      bank: "BCA",
+      isVerif: true,
+      kategori: "KOSMETIK & KECANTIKAN"
+    },
+    {
+      id: "S_015",
+      status: {
+        isLive: true,
+        etalaseCount: 180,
+        health: { sessions: 85, pel: 0, value: 0, warning: null }
+      },
+      namaToko: "Fashion Mix",
+      judulLive: "BAJU ANAK DISKON 90% CUCI GUDANG",
+      omzetLive: { omzet: "Rp 5.2M", jam: "02:15", rasio: "Rp 2.1M/j" },
+      omzetSeb: { omzet: "-", jam: "-", rasio: "-" },
+      penonton: 420,
+      pembeli: 55,
+      komisi: "Rp 520K",
+      bank: "Mandiri",
+      isVerif: false,
+      kategori: "FASHION ANAK"
+    }
+  ];
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -170,6 +209,187 @@ export const DetailStudio = () => {
           )}
         </CardContent>
       </Card>
+
+      {/* COMPLEX MANAGEMENT TABLE SEC */}
+      <h3 className="text-h3 font-bold text-gk-text-main mt-8 mb-2">Manajemen Operasional Studio Tersinkron</h3>
+      
+      <Card className="overflow-hidden border border-indigo-100 shadow-sm">
+        <div className="overflow-x-auto w-full hide-scrollbar">
+          <table className="w-full text-left bg-white/50 whitespace-nowrap min-w-[1600px] border-collapse">
+            <thead className="bg-slate-50 border-b border-indigo-100">
+              {/* HEADER ROW 1 */}
+              <tr className="text-[11px] text-gray-500 font-bold uppercase tracking-wider">
+                <th className="px-3 py-3 border-r border-indigo-50" rowSpan={2}>ID</th>
+                <th className="px-3 py-3 border-r border-indigo-50 text-center min-w-[220px]" rowSpan={2}>STATUS</th>
+                <th className="px-4 py-3 border-r border-indigo-50 min-w-[260px]" rowSpan={2}>NAMA TOKO / JUDUL LIVE</th>
+                
+                <th colSpan={3} className="px-4 py-2 border-r border-b border-indigo-100 bg-indigo-50/40 text-center text-indigo-800">
+                  ⚡ OMZET LIVE TERKINI
+                </th>
+                <th colSpan={3} className="px-4 py-2 border-r border-b border-indigo-100 bg-gray-100/50 text-center text-gray-600">
+                  🕒 OMZET SESI SEBELUMNYA
+                </th>
+                
+                <th className="px-3 py-3 border-r border-indigo-50 text-center" rowSpan={2}>PENONTON</th>
+                <th className="px-3 py-3 border-r border-indigo-50 text-center" rowSpan={2}>PEMBELI</th>
+                <th className="px-3 py-3 border-r border-indigo-50 text-center text-teal-700" rowSpan={2}>OMZET KOMISI</th>
+                <th className="px-3 py-3 border-r border-indigo-50 text-center" rowSpan={2}>BANK</th>
+                <th className="px-3 py-3 border-r border-indigo-50 text-center sticky right-[180px] z-10 bg-slate-50 shadow-[-5px_0_10px_-5px_rgba(0,0,0,0.05)]" rowSpan={2}>LIHAT LIVE</th>
+                <th className="px-3 py-3 text-center sticky right-0 z-10 bg-slate-50" rowSpan={2}>HENTIKAN LIVE</th>
+              </tr>
+              {/* HEADER ROW 2 */}
+              <tr className="text-[10px] text-gray-400 font-bold uppercase">
+                {/* OMZET LIVE SUB */}
+                <th className="px-3 py-2 border-r border-indigo-50 bg-indigo-50/20 text-center font-medium">Omzet (Rp)</th>
+                <th className="px-3 py-2 border-r border-indigo-50 bg-indigo-50/20 text-center font-medium">Jam</th>
+                <th className="px-3 py-2 border-r border-indigo-100 bg-indigo-50/20 text-center font-medium text-indigo-700">Omzet/Jam</th>
+                {/* OMZET SEB SUB */}
+                <th className="px-3 py-2 border-r border-indigo-50 bg-white/40 text-center font-medium">Omzet (Rp)</th>
+                <th className="px-3 py-2 border-r border-indigo-50 bg-white/40 text-center font-medium">Jam</th>
+                <th className="px-3 py-2 border-r border-indigo-100 bg-white/40 text-center font-medium">Omzet/Jam</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100 text-[13px] text-gray-700">
+              {mockTableData.map((item, idx) => (
+                <tr key={item.id} className="hover:bg-indigo-50/30 transition-colors">
+                  <td className="px-3 py-4 border-r border-indigo-50/50 font-bold text-gray-500 align-top">{item.id}</td>
+                  
+                  {/* Status Complex Cell */}
+                  <td className="px-3 py-4 border-r border-indigo-50/50 align-top">
+                    <div className="flex flex-col space-y-3">
+                      <div className="flex items-center justify-between">
+                         {item.status.isLive && (
+                           <span className="px-2 py-0.5 bg-red-500 text-white text-[10px] font-bold rounded animate-pulse shadow-sm">
+                             LIVE
+                           </span>
+                         )}
+                         <div className="flex flex-col items-end">
+                           <span className="text-[11px] font-bold text-indigo-900 bg-indigo-100/80 px-2 py-0.5 rounded">
+                             Σ {item.status.etalaseCount} Etalase
+                           </span>
+                           <span className="text-[9px] font-medium text-blue-600 cursor-pointer hover:underline mt-1 flex items-center">
+                             <Download size={10} className="mr-0.5" /> Unduh List Produk
+                           </span>
+                         </div>
+                      </div>
+                      
+                      {/* Health Mini Card */}
+                      <div className="bg-indigo-900 text-white rounded-md p-2 mt-1 shadow-inner border border-indigo-800">
+                        <div className="flex justify-between items-center text-[10px] mb-1 opacity-90 border-b border-indigo-700 pb-1">
+                          <span>Total Sesi: <b className="text-white">{item.status.health.sessions}</b></span>
+                          <span>Jml Pel.: <b className={item.status.health.pel > 0 ? "text-red-400" : "text-emerald-400"}>{item.status.health.pel}</b></span>
+                        </div>
+                        <div className="text-[10px] flex justify-between items-start mt-1">
+                          <span className="opacity-80">Poin Pel.: {item.status.health.value}</span>
+                          {item.status.health.warning && (
+                            <span className="text-red-300 font-medium max-w-[100px] text-right leading-tight ml-2">
+                              {item.status.health.warning}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+                  
+                  <td className="px-4 py-4 border-r border-indigo-50/50 w-[260px] whitespace-normal align-top leading-tight">
+                    <p className="font-bold text-indigo-700 text-sm mb-1">{item.namaToko}</p>
+                    <p className="font-medium text-xs text-gray-500 italic bg-gray-50/80 p-1.5 rounded line-clamp-2">
+                      "{item.judulLive}"
+                    </p>
+                  </td>
+
+                  {/* OMZET LIVE */}
+                  <td className="px-3 py-4 border-r border-indigo-50/50 font-bold text-indigo-950 align-top text-center bg-indigo-50/10">
+                    {item.omzetLive.omzet}
+                  </td>
+                  <td className="px-3 py-4 border-r border-indigo-50/50 text-gray-500 align-top text-center bg-indigo-50/10 text-xs">
+                    {item.omzetLive.jam}
+                  </td>
+                  <td className="px-3 py-4 border-r border-indigo-50/50 font-extrabold text-blue-700 align-top text-center bg-indigo-50/10">
+                    {item.omzetLive.rasio}
+                  </td>
+
+                  {/* OMZET SEB */}
+                  <td className="px-3 py-4 border-r border-indigo-50/50 text-gray-600 align-top text-center">
+                    {item.omzetSeb.omzet}
+                  </td>
+                  <td className="px-3 py-4 border-r border-indigo-50/50 text-gray-400 align-top text-center text-xs">
+                    {item.omzetSeb.jam}
+                  </td>
+                  <td className="px-3 py-4 border-r border-indigo-50/50 text-gray-500 align-top text-center">
+                    {item.omzetSeb.rasio}
+                  </td>
+
+                  <td className="px-3 py-4 border-r border-indigo-50/50 align-top text-center">
+                    <span className="font-bold bg-blue-50 text-blue-800 px-2.5 py-1 rounded-sm">{item.penonton}</span>
+                  </td>
+                  <td className="px-3 py-4 border-r border-indigo-50/50 align-top text-center">
+                    <span className="font-bold bg-emerald-50 text-emerald-800 px-2.5 py-1 rounded-sm">{item.pembeli}</span>
+                  </td>
+                  <td className="px-3 py-4 border-r border-indigo-50/50 align-top text-center">
+                    <span className="text-sm font-black text-teal-600 bg-teal-50 px-2 min-w-[90px] inline-block py-1 rounded border border-teal-100">
+                      {item.komisi}
+                    </span>
+                  </td>
+                  
+                  {/* BANK */}
+                  <td className="px-3 py-4 border-r border-indigo-50/50 align-top text-center">
+                    <div className="flex flex-col items-center justify-center space-y-1">
+                      <span className="font-bold text-gray-700">{item.bank}</span>
+                      {item.isVerif ? (
+                        <span className="text-[10px] font-bold text-emerald-600 uppercase">VERIF ✓</span>
+                      ) : (
+                        <span className="text-[10px] font-bold text-orange-500 uppercase">PENDING</span>
+                      )}
+                    </div>
+                  </td>
+
+                  {/* LIHAT LIVE ACTIONS */}
+                  <td className="px-3 py-4 border-r border-indigo-50/50 align-top sticky right-[180px] z-10 bg-white shadow-[-5px_0_10px_-5px_rgba(0,0,0,0.05)]">
+                    <div className="flex flex-col space-y-2 w-full">
+                      <Button variant="primary" size="sm" className="w-full text-[10px] h-7 px-2" leftIcon={<ExternalLink size={12}/>}>
+                        Buka Live Target
+                      </Button>
+                      <Button variant="secondary" size="sm" className="w-full text-[10px] bg-indigo-100 text-indigo-700 hover:bg-indigo-200 border-0 h-7 px-2">
+                        List Treatment
+                      </Button>
+                    </div>
+                  </td>
+
+                  {/* HENTIKAN LIVE & ADVANCED ACTIONS */}
+                  <td className="px-3 py-4 align-top sticky right-0 z-10 bg-white w-[180px]">
+                    <div className="flex flex-col space-y-1.5 w-full">
+                      <Button variant="danger" size="sm" className="w-full text-xs font-bold tracking-wider h-8" leftIcon={<StopCircle size={14}/>}>
+                        STOP LIVE INI
+                      </Button>
+                      
+                      <div className="grid grid-cols-2 gap-1 mt-1">
+                        <Button variant="secondary" size="sm" className="text-[9px] bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100 h-6 px-1 shadow-none">
+                          <Tag size={10} className="mr-1"/> Produk
+                        </Button>
+                        <Button variant="secondary" size="sm" className="text-[9px] bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 h-6 px-1 shadow-none">
+                          <RefreshCw size={10} className="mr-1"/> Input Treat
+                        </Button>
+                      </div>
+                      <Button variant="danger" size="sm" className="w-full text-[9px] bg-red-50 text-red-700 border-red-200 hover:bg-red-100 h-6 mt-0.5 shadow-none">
+                         <XCircle size={10} className="mr-1" /> Terminate Instance HP
+                      </Button>
+                      
+                      <div className="mt-3 pt-2 border-t border-gray-100/80">
+                         <span className="block text-[9px] font-bold text-center bg-gray-100 text-gray-500 py-1 rounded w-full border border-gray-200">
+                           {item.kategori}
+                         </span>
+                      </div>
+                    </div>
+                  </td>
+
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+      
       <style>{`
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
