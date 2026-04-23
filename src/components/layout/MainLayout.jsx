@@ -3,7 +3,7 @@ import { Link, useLocation, Outlet } from 'react-router-dom';
 import { 
   Menu, X, LayoutDashboard, MonitorPlay, Cookie, Settings, 
   Smartphone, ListTodo, Activity, AlertCircle, RefreshCw, 
-  User, LogOut, ChevronDown, Bell, Search
+  User, LogOut, ChevronDown, Bell, Search, TrendingUp
 } from 'lucide-react';
 import { Badge } from '../ui/Badge';
 import { useUIStore } from '../../store/useUIStore';
@@ -60,6 +60,7 @@ export const MainLayout = () => {
     { name: 'Treatment Manual', icon: <Settings size={20} />, path: '/treatment-manual' },
     { name: 'Set Studio', icon: <MonitorPlay size={20} />, path: '/set-studio' },
     { name: 'Cek Omzet', icon: <Activity size={20} />, path: '/cek-omzet' },
+    { name: 'Omzet Analitik', icon: <TrendingUp size={20} />, path: '/omzet-analitik', badge: 'NEW' },
     { section: 'DATA TREATMENT' },
     { name: 'Laporan Treatment', icon: <ListTodo size={20} />, path: '/laporan-treatment' },
     { name: 'Input Bank Produk', icon: <Settings size={20} />, path: '/input-bank-produk' },

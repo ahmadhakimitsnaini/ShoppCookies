@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { fetchApi } from '../lib/api';
 import { Card, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Skeleton } from '../components/ui/Skeleton';
@@ -66,44 +67,19 @@ export const DetailStudio = () => {
     </div>
   );
 
-  const mockTableData = [
-    {
-      id: "S_014",
-      status: {
-        isLive: true,
-        etalaseCount: 245,
-        health: { sessions: 112, pel: 1, value: 3, warning: "Host Tidak Muncul Saat Live Streaming" }
-      },
-      namaToko: "Gudang Promo VIP",
-      judulLive: "GEBYAR DISKON GILA-GILAAN KOSMETIK IMPORT TERBARU!",
-      omzetLive: { omzet: "Rp 12.4M", jam: "04:30", rasio: "Rp 2.8M/j" },
-      omzetSeb: { omzet: "Rp 8.5M", jam: "05:00", rasio: "Rp 1.7M/j" },
-      penonton: 1840,
-      pembeli: 310,
-      komisi: "Rp 1.2M",
-      bank: "BCA",
-      isVerif: true,
-      kategori: "KOSMETIK & KECANTIKAN"
-    },
-    {
-      id: "S_015",
-      status: {
-        isLive: true,
-        etalaseCount: 180,
-        health: { sessions: 85, pel: 0, value: 0, warning: null }
-      },
-      namaToko: "Fashion Mix",
-      judulLive: "BAJU ANAK DISKON 90% CUCI GUDANG",
-      omzetLive: { omzet: "Rp 5.2M", jam: "02:15", rasio: "Rp 2.1M/j" },
-      omzetSeb: { omzet: "-", jam: "-", rasio: "-" },
-      penonton: 420,
-      pembeli: 55,
-      komisi: "Rp 520K",
-      bank: "Mandiri",
-      isVerif: false,
-      kategori: "FASHION ANAK"
-    }
-  ];
+  const [tableData, setTableData] = useState([]);
+
+  useEffect(() => {
+    const loadRealData = async () => {
+      try {
+        const response = await fetchApi(`/api/studios/${id}/details`);
+        setTableData(response);
+      } catch (err) {
+        console.error('Gagal menarik detail studio:', err);
+      }
+    };
+    loadRealData();
+  }, [id]);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -124,6 +100,13 @@ export const DetailStudio = () => {
           </div>
         </div>
         <div className="mt-4 sm:mt-0 flex space-x-2">
+           <Button 
+             variant="primary" 
+             leftIcon={<Tag size={16} />}
+             onClick={() => navigate(`/list-studio/${id}/produk`)}
+           >
+             Brankas Produk (Fase 10)
+           </Button>
            <Button variant="danger" leftIcon={<ExternalLink size={16} />}>Kunjungi Toko</Button>
         </div>
       </div>
@@ -250,7 +233,12 @@ export const DetailStudio = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 text-[13px] text-gray-700">
-              {mockTableData.map((item, idx) => (
+              {tableData.length === 0 && (
+                <tr>
+                   <td colSpan="11" className="text-center py-10 font-bold text-gray-400">Belum ada akun Shopee yang masuk ke Studio ini.</td>
+                </tr>
+              )}
+              {tableData.map((item, idx) => (
                 <tr key={item.id} className="hover:bg-indigo-50/30 transition-colors">
                   <td className="px-3 py-4 border-r border-indigo-50/50 font-bold text-gray-500 align-top">{item.id}</td>
                   
@@ -364,7 +352,12 @@ export const DetailStudio = () => {
                       </Button>
                       
                       <div className="grid grid-cols-2 gap-1 mt-1">
-                        <Button variant="secondary" size="sm" className="text-[9px] bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100 h-6 px-1 shadow-none">
+                        <Button 
+                          variant="secondary" 
+                          size="sm" 
+                          className="text-[9px] bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100 h-6 px-1 shadow-none"
+                          onClick={() => navigate(`/list-studio/${item.studio_id}/produk`)}
+                        >
                           <Tag size={10} className="mr-1"/> Produk
                         </Button>
                         <Button variant="secondary" size="sm" className="text-[9px] bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 h-6 px-1 shadow-none">

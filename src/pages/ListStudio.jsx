@@ -5,44 +5,54 @@ import { Input, Select } from '../components/ui/Input';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { Table } from '../components/ui/Table';
-import { Search, Eye, ExternalLink } from 'lucide-react';
+import { fetchApi } from '../lib/api';
+import { Search, Eye, ExternalLink, MonitorPlay } from 'lucide-react';
 
 export const ListStudio = () => {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('Semua');
 
-  // Mock initial data
-  const initialData = [
-    { id: 1, userStudio: 'VIP_001', namaPemilik: 'Ahmad Faisal', namaToko: 'VIP Shopee Store', status: 'Aktif' },
-    { id: 2, userStudio: 'VIP_002', namaPemilik: 'Budi Santoso', namaToko: 'Kosmetik Center', status: 'Aktif' },
-    { id: 3, userStudio: 'VIP_003', namaPemilik: 'Siti Aminah', namaToko: 'Hijab Fashion', status: 'Nonaktif' },
-    { id: 4, userStudio: 'AKUNHAPUS_004', namaPemilik: 'Rudi Hermawan', namaToko: 'Gudang Gadget ID', status: 'Dihapus' },
-    { id: 5, userStudio: 'VIP_005', namaPemilik: 'Fajar Kurnia', namaToko: 'Otomotif Super', status: 'Aktif' },
-  ];
+  const [initialData, setInitialData] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // MENGAMBIL DATA ASLI DARI DATABASE PRISMA
+  React.useEffect(() => {
+    const memuatDataStudio = async () => {
+      try {
+        const response = await fetchApi('/api/studios');
+        // response.data berisi: id, name, status, activeAccountsCount
+        setInitialData(response.data);
+      } catch (err) {
+        console.error("Gagal menarik daftar studio:", err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    memuatDataStudio();
+  }, []);
 
   // Filtering Logic
   const filteredData = initialData.filter(item => {
-    const matchSearch = 
-      item.namaToko.toLowerCase().includes(searchTerm.toLowerCase()) || 
-      item.userStudio.toLowerCase().includes(searchTerm.toLowerCase());
+    // Karena propertinya beda (dari Prisma), kita cocokan name
+    const namaTokoAtauStudio = item.name ? item.name.toLowerCase() : '';
+    const matchSearch = namaTokoAtauStudio.includes(searchTerm.toLowerCase());
     
-    const matchFilter = filterStatus === 'Semua' ? true : item.status === filterStatus;
+    // Status dari database: 'ACTIVE', 'MAINTENANCE' dsb.
+    let displayStatus = item.status === 'ACTIVE' ? 'Aktif' : 'Nonaktif';
+    const matchFilter = filterStatus === 'Semua' ? true : displayStatus === filterStatus;
     
     return matchSearch && matchFilter;
   });
 
   const columns = [
-    { header: 'ID', accessor: 'id' },
-    { header: 'User Studio', cell: (row) => <span className="font-bold">{row.userStudio}</span> },
-    { header: 'Pemilik', accessor: 'namaPemilik' },
-    { header: 'Nama Toko', accessor: 'namaToko' },
+    { header: 'ID Studio', cell: (row) => <span className="text-xs text-gray-400">{row.id.substring(0,8)}...</span> },
+    { header: 'Nama Studio', cell: (row) => <span className="font-bold whitespace-normal">{row.name}</span> },
+    { header: 'Akun Aktif', cell: (row) => <Badge status={row.activeAccountsCount > 0 ? 'AMAN' : 'WARNING'} label={`${row.activeAccountsCount} AKUN`} /> },
+    { header: 'Total Sesi', accessor: 'totalLiveSessions' },
     { header: 'Status', cell: (row) => {
-        let statusBadge = 'gray'; // offline fallback
-        if (row.status === 'Aktif') statusBadge = 'AMAN';
-        else if (row.status === 'Nonaktif') statusBadge = 'EXPIRED';
-        else if (row.status === 'Dihapus') statusBadge = 'OFFLINE'; // Or any dark badge
-        return <Badge status={statusBadge} label={row.status.toUpperCase()} />;
+        let statusBadge = row.status === 'ACTIVE' ? 'AMAN' : 'OFFLINE';
+        return <Badge status={statusBadge} label={row.status} />;
       } 
     },
     { header: 'Eksekusi', cell: (row) => (
@@ -120,13 +130,18 @@ export const ListStudio = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {filteredData.length > 0 ? (
+                {isLoading ? (
+                  <tr>
+                    <td colSpan={columns.length} className="px-6 py-10 text-center text-gray-500">
+                       Memuat Daftar Studio dari Database Prisma...
+                    </td>
+                  </tr>
+                ) : filteredData.length > 0 ? (
                   filteredData.map((row, rowIndex) => {
-                    const isDeleted = row.userStudio.startsWith('AKUNHAPUS_');
                     return (
                       <tr 
                         key={rowIndex} 
-                        className={`hover:bg-gray-50 transition-standard ${isDeleted ? 'opacity-50 grayscale bg-gray-50' : ''}`}
+                        className={`hover:bg-gray-50 transition-standard`}
                       >
                         {columns.map((col, colIndex) => (
                           <td key={colIndex} className="px-6 py-4">

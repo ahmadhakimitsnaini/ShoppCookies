@@ -22,6 +22,7 @@ import { TreatmentManual } from './pages/TreatmentManual'
 import { SetStudio } from './pages/SetStudio'
 import { InputDataBank } from './pages/InputDataBank'
 import { CekOmzet } from './pages/CekOmzet'
+import { OmzetAnalitik } from './pages/OmzetAnalitik'
 import { Login } from './pages/Login'
 import { NotFound } from './pages/NotFound'
 
@@ -73,6 +74,7 @@ const AppRouter = () => {
           <Route path="/treatment-manual" element={<TreatmentManual />} />
           <Route path="/set-studio" element={<SetStudio />} />
           <Route path="/cek-omzet" element={<CekOmzet />} />
+          <Route path="/omzet-analitik" element={<OmzetAnalitik />} />
           <Route path="/laporan-treatment" element={<PlaceholderPage title="Laporan Treatment" />} />
           <Route path="/input-bank-produk" element={<InputDataBank />} />
           

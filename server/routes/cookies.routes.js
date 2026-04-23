@@ -3,67 +3,84 @@ import prisma from '../db.js';
 
 const router = express.Router();
 
-/**
- * POST /api/cookies
- * Menyimpan Cookie rekaman dari ekstensi/UI Frontend
- */
-router.post('/', async (req, res) => {
+// GET: Cari Akun Shopee berdasarkan Username
+router.get('/search', async (req, res) => {
   try {
-    const { account_id, raw_cookie_encrypted, user_agent } = req.body;
-
-    if (!account_id || !raw_cookie_encrypted) {
-      return res.status(400).json({ error: 'account_id dan raw_cookie_encrypted wajib dikirim!' });
+    const { username } = req.query;
+    if (!username) {
+      return res.status(400).json({ error: 'Parameter username diperlukan.' });
     }
 
-    // Buat session baru (upsert atau insert standar sesuai kebutuhan)
-    const newSession = await prisma.shopeeSession.create({
-      data: {
-        account_id,
-        raw_cookie_encrypted,
-        user_agent: user_agent || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-        status: 'LIVE',
-        health_score: 100,
+    const accounts = await prisma.shopeeAccount.findMany({
+      where: {
+        shopee_username: {
+          contains: username,
+          mode: 'insensitive'
+        }
       },
+      include: {
+        member: true,
+        studio: true,
+        sessions: {
+          where: { status: 'LIVE' },
+          take: 1
+        }
+      }
     });
 
-    res.status(201).json({
-      message: 'Cookie berhasil disimpan ke dalam sesi aktif.',
-      data: newSession,
-    });
+    res.json(accounts);
   } catch (error) {
-    console.error('Error saving cookie:', error);
-    res.status(500).json({ error: 'Terjadi kesalahan sistem saat menyimpan cookie.' });
+    console.error('Error search accounts:', error);
+    res.status(500).json({ error: 'Gagal mencari akun.' });
   }
 });
 
-/**
- * GET /api/cookies/sessions
- * Mengambil daftar sesi live yang sehat (sebagai contoh API view)
- */
-router.get('/sessions', async (req, res) => {
+// POST: Hubungkan Cookie dengan ShopeeAccount dan Sematkan Studio
+router.post('/link', async (req, res) => {
   try {
-    const sessions = await prisma.shopeeSession.findMany({
-      where: {
-        status: 'LIVE',
-      },
-      include: {
-        account: {
-          select: {
-            shopee_username: true,
-            shopee_shop_name: true,
-            health_status: true,
-            member: { select: { name: true, phone: true } },
-            studio: { select: { name: true } }
-          }
-        }
-      },
-      orderBy: { last_sync_at: 'desc' }
+    const { account_id, studio_id, raw_cookie } = req.body;
+    if (!account_id || !studio_id || !raw_cookie) {
+      return res.status(400).json({ error: 'Gagal! ID Akun, Studio, dan Raw Cookie wajib diisi seluruhnya.' });
+    }
+
+    // 1. Update shopee account untuk ditugaskan ke Studio tertentu
+    await prisma.shopeeAccount.update({
+      where: { id: account_id },
+      data: { studio_id: studio_id }
     });
 
-    res.status(200).json({ data: sessions });
+    // 2. Cek apakah sesi sudah ada sblumnya
+    const existingSession = await prisma.shopeeSession.findFirst({
+      where: { account_id: account_id }
+    });
+
+    if (existingSession) {
+      // Overwrite raw cookie dan revive!
+      await prisma.shopeeSession.update({
+        where: { id: existingSession.id },
+        data: {
+          raw_cookie_encrypted: raw_cookie,
+          status: 'LIVE',
+          expired_at: null,
+          user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)"
+        }
+      });
+    } else {
+      // Buat baru
+      await prisma.shopeeSession.create({
+        data: {
+          account_id: account_id,
+          raw_cookie_encrypted: raw_cookie,
+          user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)",
+          status: 'LIVE'
+        }
+      });
+    }
+
+    res.json({ success: true, message: 'Sesi Cookie diaktifkan dan Akun dipatenkan ke Studio!' });
   } catch (error) {
-    console.error('Error fetching sessions:', error);
-    res.status(500).json({ error: 'Gagal mendapatkan data sesi cookie.' });
+    console.error('Error melink cookie:', error);
+    res.status(500).json({ error: 'Gagal mengeratkan sistem cookies akibat internal error.' });
   }
 });
 

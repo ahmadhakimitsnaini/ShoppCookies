@@ -1,24 +1,29 @@
-import React, { useState } from 'react';
+import React, { useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card';
 import { Switch } from '../components/ui/Switch';
 import { Button } from '../components/ui/Button';
+import { useStudioStore } from '../store/useStudioStore';
 
 export const SetStudio = () => {
-  const initialStudios = [
-    { id: 1, userStudio: 'Gudang Promo S_001', isShareOn: true },
-    { id: 2, userStudio: 'Kosmetik VIP S_002', isShareOn: false },
-    { id: 3, userStudio: 'Fashion Mix S_003', isShareOn: false },
-    { id: 4, userStudio: 'Baju Anak S_004', isShareOn: true },
-  ];
+  const { studios, fetchStudios, toggleShare, isLoading } = useStudioStore();
 
-  const [studios, setStudios] = useState(initialStudios);
+  useEffect(() => {
+    // Only fetch if empty, or enforce a re-fetch to get latest status
+    fetchStudios();
+  }, []);
 
-  const toggleSingle = (id) => {
-    setStudios(studios.map(s => s.id === id ? { ...s, isShareOn: !s.isShareOn } : s));
+  const toggleSingle = (id, currentStatus) => {
+    // Balik status saat ini dan lempar ke API
+    toggleShare(id, !currentStatus);
   };
 
-  const setAll = (state) => {
-    setStudios(studios.map(s => ({ ...s, isShareOn: state })));
+  const setAll = (targetState) => {
+    // Optimalnya memakai batch update backend, untuk sekarang kita interasi
+    studios.forEach(s => {
+      if (s.is_share_on !== targetState) {
+         toggleShare(s.id, targetState);
+      }
+    });
   };
 
   return (
@@ -52,27 +57,32 @@ export const SetStudio = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
+              {isLoading && studios.length === 0 && (
+                 <tr>
+                   <td colSpan="3" className="px-6 py-8 text-center text-gray-500">Memuat data studio...</td>
+                 </tr>
+              )}
               {studios.map((row) => (
                 <tr 
                   key={row.id} 
-                  className={`transition-colors duration-300 ${row.isShareOn ? 'bg-emerald-50 hover:bg-emerald-100' : 'bg-white hover:bg-gray-50'}`}
+                  className={`transition-colors duration-300 ${row.is_share_on ? 'bg-emerald-50 hover:bg-emerald-100' : 'bg-white hover:bg-gray-50'}`}
                 >
-                  <td className={`px-6 py-5 font-bold ${row.isShareOn ? 'text-emerald-700' : 'text-gray-500'}`}>
-                    #{row.id}
+                  <td className={`px-6 py-5 font-bold text-xs ${row.is_share_on ? 'text-emerald-700' : 'text-gray-500'}`}>
+                    #{row.id.substring(0,8)}
                   </td>
                   <td className="px-6 py-5">
-                    <p className={`font-semibold text-lg ${row.isShareOn ? 'text-emerald-900' : 'text-gray-700'}`}>
-                      {row.userStudio}
+                    <p className={`font-semibold text-lg ${row.is_share_on ? 'text-emerald-900' : 'text-gray-700'}`}>
+                      {row.name}
                     </p>
                   </td>
                   <td className="px-6 py-5 text-right flex justify-end items-center h-full pt-6">
                     <Switch 
-                      checked={row.isShareOn} 
-                      onChange={() => toggleSingle(row.id)} 
+                      checked={row.is_share_on} 
+                      onChange={() => toggleSingle(row.id, row.is_share_on)} 
                       size="lg"
                     />
-                    <span className={`ml-3 w-10 text-left font-bold text-sm ${row.isShareOn ? 'text-emerald-600' : 'text-gray-400'}`}>
-                      {row.isShareOn ? 'ON' : 'OFF'}
+                    <span className={`ml-3 w-10 text-left font-bold text-sm ${row.is_share_on ? 'text-emerald-600' : 'text-gray-400'}`}>
+                      {row.is_share_on ? 'ON' : 'OFF'}
                     </span>
                   </td>
                 </tr>
