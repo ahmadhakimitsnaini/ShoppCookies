@@ -1,206 +1,415 @@
-import React, { useState } from 'react';
-import { Card } from '../components/ui/Card';
+import React, { useState, useEffect } from 'react';
+import { useParams, Link } from 'react-router-dom';
+import { Card, CardContent, CardHeader } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
-import { ArrowUpDown } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Input } from '../components/ui/Input';
+import { Badge } from '../components/ui/Badge';
+import { 
+  Link2, Trash2, Plus, ArrowLeft, PlayCircle, 
+  BarChart3, Database, RefreshCw, Star, ShoppingCart, 
+  MousePointer2, Package, CheckSquare, Square
+} from 'lucide-react';
+import { fetchApi } from '../lib/api';
 
 export const DetailTokoProduk = () => {
-  // Mock data berdasarkan gambar referensi
-  const [products, setProducts] = useState([
-    {
-      id: 1,
-      image: "https://images.unsplash.com/photo-1602751584552-8ba7a74c6530?w=200&h=200&q=80&fit=crop", // Simulasi perhiasan
-      name: "Cincin Emas Solitaire List Gold 10K Semar Nusantara",
-      url: "https://shopee.co.id/product/52215352/5979037681",
-      kom: 1,
-      stok: "1.008",
-      ker: 2,
-      klik: 3,
-      terj: "2.229.410",
-      harga: "2.273.700",
-      bintang: "4.90",
-      selected: false
-    },
-    {
-      id: 2,
-      image: "https://images.unsplash.com/photo-1513694203232-719a280e022f?w=200&h=200&q=80&fit=crop", // Simulasi gorden
-      name: "Gorden (khusus 12 gelombang, 8, 9 gelombang) gorden blackout import minimalis polos embos",
-      url: "https://shopee.co.id/product/132905393/20384827395",
-      kom: 1,
-      stok: "761",
-      ker: 2,
-      klik: 2,
-      terj: "800.000",
-      harga: "198.000",
-      bintang: "4.90",
-      selected: false
-    },
-    {
-      id: 3,
-      image: "https://images.unsplash.com/photo-1620405232753-4318de921ca4?w=200&h=200&q=80&fit=crop", // Simulasi bedcover
-      name: "Goldenic - Bedcover Bayi Set Motif Harvest Katun Halus",
-      url: "https://shopee.co.id/product/1090664533/24467752808",
-      kom: 6,
-      stok: "1.864",
-      ker: 3,
-      klik: 5,
-      terj: "506.700",
-      harga: "168.999",
-      bintang: "4.90",
-      selected: false
-    },
-    {
-      id: 4,
-      image: "https://images.unsplash.com/photo-1591561954557-26941169b49e?w=200&h=200&q=80&fit=crop", // Simulasi fashion
-      name: "Tas Fashion Wanita Import Terbaru Selempang Trendy",
-      url: "https://shopee.co.id/product/14326205/40405163804",
-      kom: 3,
-      stok: "638",
-      ker: 3,
-      klik: 3,
-      terj: "438.000",
-      harga: "229.000",
-      bintang: "4.90",
-      selected: false
+  const { id } = useParams(); // id Studio
+  const [activeTab, setActiveTab] = useState('brankas'); // 'brankas' | 'etalase'
+  
+  // State Brankas
+  const [products, setProducts] = useState([]);
+  const [newUrl, setNewUrl] = useState('');
+  const [newName, setNewName] = useState('');
+  const [isBulkMode, setIsBulkMode] = useState(false);
+  const [bulkLinks, setBulkLinks] = useState('');
+  
+  // State Etalase Monitor
+  const [liveProducts, setLiveProducts] = useState([]);
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [filterKomisi, setFilterKomisi] = useState('Semua');
+  
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    if (activeTab === 'brankas') {
+      loadProducts();
+    } else {
+      loadLiveEtalase();
     }
-  ]);
+  }, [id, activeTab]);
 
-  const [selectAll, setSelectAll] = useState(false);
-
-  const handleSelectAll = () => {
-    const newState = !selectAll;
-    setSelectAll(newState);
-    setProducts(products.map(p => ({ ...p, selected: newState })));
+  const loadProducts = async () => {
+    setIsLoading(true);
+    try {
+      const res = await fetchApi(`/api/studios/${id}/products`);
+      setProducts(res);
+    } catch (err) {
+      console.error("Gagal menarik produk:", err);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleSelectOne = (id) => {
-    const newProducts = products.map(p => (p.id === id ? { ...p, selected: !p.selected } : p));
-    setProducts(newProducts);
-    setSelectAll(newProducts.every(p => p.selected));
+  const loadLiveEtalase = async () => {
+    setIsLoading(true);
+    try {
+      const res = await fetchApi(`/api/studios/${id}/live-etalase`);
+      setLiveProducts(res);
+    } catch (err) {
+      console.error("Gagal menarik etalase live:", err);
+    } finally {
+      setIsLoading(false);
+    }
   };
+
+  const handleAddProduct = async (e) => {
+    e.preventDefault();
+    if (!newUrl.trim()) return;
+
+    try {
+      await fetchApi(`/api/studios/${id}/products`, {
+        method: 'POST',
+        body: JSON.stringify({ product_url: newUrl, product_name: newName })
+      });
+      setNewUrl('');
+      setNewName('');
+      loadProducts();
+    } catch (err) {
+      alert(`Gagal menyimpan produk: ${err.message}`);
+    }
+  };
+
+  const handleBulkAdd = async (e) => {
+    e.preventDefault();
+    const links = bulkLinks
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line.startsWith('http'));
+
+    if (links.length === 0) {
+      alert("Masukkan minimal satu link Shopee yang valid (diawali http).");
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      const res = await fetchApi(`/api/studios/${id}/products/bulk`, {
+        method: 'POST',
+        body: JSON.stringify({ product_urls: links })
+      });
+      alert(res.message);
+      setBulkLinks('');
+      setIsBulkMode(false);
+      loadProducts();
+    } catch (err) {
+      alert(`Gagal import massal: ${err.message}`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDelete = async (prodId) => {
+    if(!window.confirm("Bakar tautan ini?")) return;
+    try {
+      await fetchApi(`/api/studios/${id}/products/${prodId}`, { method: 'DELETE' });
+      loadProducts();
+    } catch(err) {
+      alert("Gagal menghapus.");
+    }
+  };
+
+  const toggleSelect = (prodId) => {
+    if (selectedIds.includes(prodId)) {
+        setSelectedIds(selectedIds.filter(i => i !== prodId));
+    } else {
+        setSelectedIds([...selectedIds, prodId]);
+    }
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.length === liveProducts.length) {
+        setSelectedIds([]);
+    } else {
+        setSelectedIds(liveProducts.map(p => p.id));
+    }
+  };
+
+  // Filtered Logic for Etalase
+  const filteredEtalase = liveProducts.filter(p => {
+    if (filterKomisi === 'Semua') return true;
+    // Numeric filter: show only items with commission equal to selected number
+    const komisiNum = Number(p.kom);
+    const filterNum = Number(filterKomisi);
+    if (!isNaN(filterNum)) {
+      return komisiNum === filterNum;
+    }
+    return true;
+  });
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500 pb-12 overflow-hidden">
-      {/* HEADER SECTION */}
-      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center py-2 px-1">
-        <h1 className="text-[22px] font-bold text-gray-800 tracking-tight">
-          List Produk Akun 201, Toko: SHIMASTORE99
-        </h1>
-        <div className="text-xs text-gray-400 mt-2 lg:mt-0 font-medium">
-          <Link to="/home" className="hover:text-gk-primary transition-colors">Home</Link>
-           <span className="mx-2">/</span> 
-          <span className="text-gk-primary">List Produk Akun 201, Toko: SHIMASTORE99</span>
+    <div className="space-y-6 animate-in fade-in duration-500 max-w-6xl mx-auto px-4 mt-6 pb-20">
+      
+      {/* Header & Navigasi */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+            <Link to={`/list-studio/${id}`} className="text-gray-400 hover:text-gk-primary bg-white p-2 border border-gray-200 rounded-full shadow-sm transition-transform hover:-translate-x-1">
+              <ArrowLeft size={20} />
+            </Link>
+            <div>
+              <h1 className="text-h2 font-bold text-gk-text-main">Manajemen Produk</h1>
+              <p className="text-sm text-gk-text-muted mt-0.5">Studio ID: {id.substring(0,8)}...</p>
+            </div>
+        </div>
+
+        {/* Tab Switcher */}
+        <div className="flex p-1 bg-gray-200/50 rounded-lg w-fit">
+          <button 
+            onClick={() => setActiveTab('brankas')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold transition-all ${activeTab === 'brankas' ? 'bg-white text-gk-primary shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+          >
+            <Database size={16} /> Brankas Bot
+          </button>
+          <button 
+            onClick={() => setActiveTab('etalase')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold transition-all ${activeTab === 'etalase' ? 'bg-white text-gk-primary shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+          >
+            <BarChart3 size={16} /> Monitor Etalase
+          </button>
         </div>
       </div>
 
-      {/* TABLE SECTION */}
-      <Card className="border-0 shadow-sm rounded-xl overflow-hidden bg-white">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[1200px]">
-            {/* Header dengan style Project Pallete (Abu gelap netral) menggantikan coklat agar lebih modern */}
-            <thead className="bg-[#566270] text-white text-[11px] font-medium tracking-wide">
-              <tr>
-                <th className="px-4 py-3 border-r border-[#697686] whitespace-nowrap">
-                  <div className="flex items-center justify-between">
-                    ID <ArrowUpDown size={12} className="opacity-60 ml-1"/>
-                  </div>
-                </th>
-                <th className="px-6 py-3 border-r border-[#697686] min-w-[300px]">
-                  <div className="flex items-center justify-center">
-                    BARANG <ArrowUpDown size={12} className="opacity-60 ml-2"/>
-                  </div>
-                </th>
-                <th className="px-4 py-3 border-r border-[#697686]">
-                   <div className="flex items-center justify-center">
-                    URL <ArrowUpDown size={12} className="opacity-60 ml-2"/>
-                  </div>
-                </th>
-                <th className="px-3 py-3 border-r border-[#697686] text-center">KOM</th>
-                <th className="px-3 py-3 border-r border-[#697686] text-center">STOK <ArrowUpDown size={10} className="inline opacity-60"/></th>
-                <th className="px-3 py-3 border-r border-[#697686] text-center">KER <ArrowUpDown size={10} className="inline opacity-60"/></th>
-                <th className="px-3 py-3 border-r border-[#697686] text-center">KLIK <ArrowUpDown size={10} className="inline opacity-60"/></th>
-                <th className="px-3 py-3 border-r border-[#697686] text-center">TERJ <ArrowUpDown size={10} className="inline opacity-60"/></th>
-                <th className="px-3 py-3 border-r border-[#697686] text-center">HARGA <ArrowUpDown size={10} className="inline opacity-60"/></th>
-                <th className="px-3 py-3 border-r border-[#697686] text-center">BINTANG <ArrowUpDown size={10} className="inline opacity-60"/></th>
-                
-                {/* Kolom Aksi Khusus Akhir */}
-                <th className="px-3 py-2 text-center w-[160px] bg-[#4a5563]">
-                  <div className="flex flex-col space-y-2 items-center justify-center h-full">
-                    <div className="flex items-center space-x-2 text-[10px] font-semibold text-gray-200">
-                      <span>HAPUS</span>
-                      <label className="flex items-center space-x-1 cursor-pointer">
-                        <input 
-                          type="checkbox" 
-                          className="w-3 h-3 rounded-sm text-gk-primary focus:ring-gk-primary bg-white border-transparent cursor-pointer"
-                          checked={selectAll}
-                          onChange={handleSelectAll}
-                        />
-                        <span className="whitespace-nowrap">PILIH SEMUA</span>
-                      </label>
+      {activeTab === 'brankas' ? (
+        <>
+          {/* TAB 1: BRANKAS BOT */}
+          <Card className="border-t-4 border-t-gk-primary shadow-lg ring-1 ring-black/5">
+            <CardContent className="p-6">
+                <div className="flex justify-between items-center mb-4">
+                    <div>
+                        <h3 className="text-lg font-bold text-gray-800">Tambah Amunisi Injeksi</h3>
+                        <p className="text-xs text-gray-500">Link yang Anda masukkan di sini akan disedot oleh robot Playwright saat Live dimulai.</p>
                     </div>
-                    <Button size="sm" variant="danger" className="w-full text-[10px] py-1 h-7 border-0 bg-red-500 hover:bg-red-600 shadow-sm rounded">
-                      Hapus Produk
-                    </Button>
-                    <Button size="sm" variant="primary" className="w-full text-[10px] py-1 h-7 border-0 bg-[#00c5a3] hover:bg-[#00b092] text-white shadow-sm rounded">
-                      Tambah Produk
-                    </Button>
-                  </div>
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100 text-[12px] text-gray-600">
-              {products.map((p) => (
-                <tr key={p.id} className="hover:bg-gray-50/50 transition-colors">
-                  <td className="px-4 py-8 border-r border-gray-100 align-top text-gray-700 font-medium">
-                    {p.id}.
-                  </td>
-                  <td className="px-6 py-6 border-r border-gray-100 align-top max-w-[340px]">
-                    <div className="flex flex-col items-center justify-centertext-center w-full">
-                      <div className="w-32 h-32 mb-3 bg-gray-50 flex items-center justify-center p-1 rounded-sm border border-gray-100 overflow-hidden shadow-sm">
-                        <img src={p.image} alt={p.name} className="w-full h-full object-contain" />
-                      </div>
-                      <a href={p.url} target="_blank" rel="noreferrer" className="text-blue-600 text-[11px] font-medium text-center hover:underline leading-tight px-4 line-clamp-2">
-                        {p.name}
-                      </a>
-                      <p className="text-[10px] text-gray-400 mt-1">URL:</p>
-                      <a href={p.url} target="_blank" rel="noreferrer" className="text-[9px] text-gray-500 text-center truncate w-[90%] hover:text-blue-500">
-                        {p.url}
-                      </a>
-                    </div>
-                  </td>
-                  <td className="px-4 py-8 border-r border-gray-100 align-top whitespace-nowrap">
-                    <p className="text-[11px] text-gray-500 mt-1">{p.url}</p>
-                  </td>
-                  
-                  {/* Statistik Numerik Tengah */}
-                  <td className="px-3 py-8 border-r border-gray-100 text-center font-medium">{p.kom}</td>
-                  <td className="px-3 py-8 border-r border-gray-100 text-center font-medium">{p.stok}</td>
-                  <td className="px-3 py-8 border-r border-gray-100 text-center font-medium">{p.ker}</td>
-                  <td className="px-3 py-8 border-r border-gray-100 text-center font-medium">{p.klik}</td>
-                  <td className="px-3 py-8 border-r border-gray-100 text-center font-medium text-gray-800">{p.terj}</td>
-                  <td className="px-3 py-8 border-r border-gray-100 text-center font-medium text-gray-800">{p.harga}</td>
-                  <td className="px-3 py-8 border-r border-gray-100 text-center font-medium">{p.bintang}</td>
-                  
-                  {/* Kolom Checkbox */}
-                  <td className="px-3 py-8 align-top text-center bg-gray-50/50">
-                    <div className="flex items-center justify-center h-full pt-2">
-                      <input 
-                        type="checkbox" 
-                        className="w-4 h-4 rounded-md border-gray-300 text-gk-primary focus:ring-gk-primary/30 cursor-pointer shadow-sm transition-all"
-                        checked={p.selected}
-                        onChange={() => handleSelectOne(p.id)}
+                    <button 
+                        onClick={() => setIsBulkMode(!isBulkMode)}
+                        className={`text-xs font-bold px-3 py-1.5 rounded border transition-colors ${isBulkMode ? 'bg-gk-primary text-white border-gk-primary' : 'bg-white text-gk-primary border-gk-primary/20 hover:bg-gk-primary/5'}`}
+                    >
+                        {isBulkMode ? 'Mode Satuan' : 'Mode Massal (Bulk)'}
+                    </button>
+                </div>
+
+                {!isBulkMode ? (
+                  <form onSubmit={handleAddProduct} className="flex flex-col md:flex-row gap-4 items-start md:items-end">
+                    <div className="flex-1 w-full space-y-1">
+                      <label className="text-xs font-semibold text-gray-500 uppercase tracking-widest">Judul Singkat</label>
+                      <Input 
+                        placeholder="Contoh: Baju Gamis" 
+                        value={newName} 
+                        onChange={(e) => setNewName(e.target.value)} 
+                        containerClassName="mb-0" 
                       />
                     </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
-      
-      {/* Tambahan Spasi Bawah untuk nafas scrolling */}
-      <div className="h-4"></div>
+                    <div className="flex-[2] w-full space-y-1">
+                      <label className="text-xs font-semibold text-gray-500 uppercase tracking-widest">Link Shopee Affiliate *</label>
+                      <Input 
+                        placeholder="https://shope.ee/..." 
+                        value={newUrl} 
+                        onChange={(e) => setNewUrl(e.target.value)} 
+                        containerClassName="mb-0" 
+                        required
+                      />
+                    </div>
+                    <Button type="submit" variant="primary" className="h-[42px] px-8 font-bold shadow-gk-primary/20 shadow-lg">
+                        <Plus size={18} className="mr-2"/> Tambahkan
+                    </Button>
+                  </form>
+                ) : (
+                  <form onSubmit={handleBulkAdd} className="space-y-4">
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold text-gray-500 uppercase tracking-widest">List Link Shopee (Satu per baris)</label>
+                      <textarea 
+                        className="w-full h-40 p-3 text-sm font-mono border border-gray-200 rounded-lg focus:ring-2 focus:ring-gk-primary/30 focus:border-gk-primary outline-none transition-all"
+                        placeholder="https://shope.ee/link1&#10;https://shope.ee/link2&#10;https://shope.ee/link3"
+                        value={bulkLinks}
+                        onChange={(e) => setBulkLinks(e.target.value)}
+                        required
+                      ></textarea>
+                    </div>
+                    <div className="flex justify-end">
+                        <Button type="submit" variant="primary" className="px-10 font-bold shadow-lg shadow-gk-primary/20">
+                           Mulai Import ({bulkLinks.split('\n').filter(l => l.trim().startsWith('http')).length} Produk)
+                        </Button>
+                    </div>
+                  </form>
+                )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row justify-between items-center bg-gray-50/50">
+              <h3 className="text-sm font-bold text-gray-700 flex items-center gap-2">
+                Daftar Antrean Injeksi <Badge label={`${products.length} SKU`} status="AMAN" />
+              </h3>
+              <div className="bg-yellow-50 text-yellow-700 text-[10px] px-3 py-1.5 rounded-full font-bold flex items-center gap-1 border border-yellow-100 uppercase tracking-tighter">
+                <PlayCircle size={12} className="text-yellow-500"/> Gunakan /inject di Telegram!
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              {isLoading ? (
+                <div className="p-12 text-center text-gray-400">
+                    <RefreshCw size={24} className="animate-spin mx-auto mb-2 opacity-20" />
+                    Memuat Brankas...
+                </div>
+              ) : products.length === 0 ? (
+                <div className="text-center py-20 px-4">
+                    <div className="bg-gray-100 h-16 w-16 mx-auto rounded-full flex items-center justify-center text-gray-300 mb-4">
+                      <Link2 size={24} />
+                    </div>
+                    <h4 className="text-gray-900 font-bold">Brankas Kosong</h4>
+                    <p className="text-gray-500 text-sm max-w-xs mx-auto">Anda belum menambahkan link produk untuk disuntikkan ke akun ini.</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-gray-100">
+                  {products.map((prod, i) => (
+                    <div key={prod.id} className="flex items-center p-4 hover:bg-gray-50/80 transition-colors group">
+                        <div className="h-8 w-8 bg-gk-primary/10 text-gk-primary rounded flex items-center justify-center font-black text-xs mr-4 shrink-0">
+                          {i + 1}
+                        </div>
+                        <div className="flex-1 min-w-0 pr-4">
+                          <p className="font-bold text-gray-800 truncate text-sm">
+                            {prod.product_name || 'Tanpa Judul'}
+                          </p>
+                          <code className="text-[10px] text-blue-500 truncate block opacity-70">
+                            {prod.product_url}
+                          </code>
+                        </div>
+                        <Button variant="ghost" size="icon" onClick={() => handleDelete(prod.id)} className="text-gray-300 hover:text-red-500 hover:bg-red-50 h-8 w-8 transition-all">
+                          <Trash2 size={16} />
+                        </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </>
+      ) : (
+        <>
+          {/* TAB 2: MONITOR ETALASE LIVE */}
+          <div className="flex justify-between items-center mb-2">
+              <div className="flex gap-2">
+                <Button 
+                    variant="danger" 
+                    size="sm" 
+                    disabled={selectedIds.length === 0}
+                    className="font-bold text-[11px] h-8 px-4 uppercase tracking-wider"
+                >
+                    Hapus Produk ({selectedIds.length})
+                </Button>
+                <Button 
+                    variant="primary" 
+                    size="sm" 
+                    className="bg-teal-500 hover:bg-teal-600 font-bold text-[11px] h-8 px-4 uppercase tracking-wider"
+                >
+                    Tambah Produk
+                </Button>
+              </div>
+              <div className="flex gap-4 items-center">
+                <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold text-gray-400 uppercase">Filter Komisi:</span>
+                    <select 
+                        value={filterKomisi}
+                        onChange={(e) => setFilterKomisi(e.target.value)}
+                        className="bg-white border border-gray-200 text-[11px] font-bold rounded-md px-2 py-1 focus:ring-1 focus:ring-gk-primary outline-none"
+                    >
+                        <option value="Semua">Tampilkan Semua</option>
+                        <option value="1">1%</option>
+                        <option value="2">2%</option>
+                        <option value="3">3%</option>
+                        <option value="4">4%</option>
+                        <option value="5">5%</option>
+                    </select>
+                </div>
+                <Button variant="ghost" size="sm" onClick={loadLiveEtalase} className="text-gk-text-muted hover:text-gk-primary">
+                    <RefreshCw size={14} className={`mr-2 ${isLoading ? 'animate-spin' : ''}`} /> Sinkron Data Shopee
+                </Button>
+              </div>
+          </div>
+
+          <div className="bg-white rounded-xl border border-gk-border shadow-sm overflow-hidden overflow-x-auto">
+             <table className="w-full text-left border-collapse min-w-[1000px]">
+                <thead className="bg-[#6b6666] text-white text-[11px] font-bold uppercase tracking-widest">
+                  <tr>
+                    <th className="px-4 py-3 w-12 text-center border-r border-gray-500/30">ID</th>
+                    <th className="px-4 py-3 border-r border-gray-500/30 min-w-[250px]">Barang</th>
+                    <th className="px-4 py-3 border-r border-gray-500/30">URL</th>
+                    <th className="px-4 py-3 border-r border-gray-500/30 text-center">Kom</th>
+                    <th className="px-2 py-3 border-r border-gray-500/30 text-center">Stok</th>
+                    <th className="px-2 py-3 border-r border-gray-500/30 text-center">Ker</th>
+                    <th className="px-2 py-3 border-r border-gray-500/30 text-center">Klik</th>
+                    <th className="px-2 py-3 border-r border-gray-500/30 text-center">Terj</th>
+                    <th className="px-4 py-3 border-r border-gray-500/30 text-center">Harga</th>
+                    <th className="px-4 py-3 border-r border-gray-500/30 text-center">Bintang</th>
+                    <th className="px-4 py-3 text-center">
+                        <button onClick={toggleSelectAll} className="hover:text-gk-primary transition-colors">
+                            {selectedIds.length === liveProducts.length && liveProducts.length > 0 ? (
+                                <CheckSquare size={16} className="mx-auto" />
+                            ) : (
+                                <Square size={16} className="mx-auto" />
+                            )}
+                        </button>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 text-[12px] text-gray-700">
+                   {isLoading && filteredEtalase.length === 0 ? (
+                      <tr><td colSpan="11" className="p-20 text-center text-gray-400 font-medium">Sedang menembus API Shopee...</td></tr>
+                   ) : filteredEtalase.length === 0 ? (
+                      <tr><td colSpan="11" className="p-20 text-center text-gray-400 font-medium italic">Tidak ada produk dengan kriteria komisi tersebut.</td></tr>
+                   ) : filteredEtalase.map((prod, idx) => (
+                      <tr key={prod.id} className="hover:bg-blue-50/30 transition-colors">
+                         <td className="px-4 py-4 text-center font-mono text-gray-400 border-r border-gray-50">{idx + 1}.</td>
+                         <td className="px-4 py-4 border-r border-gray-50">
+                            <div className="flex flex-col items-center">
+                               <img src={prod.image} alt={prod.name} className="w-20 h-20 object-cover rounded shadow-sm border border-gray-100 mb-2" />
+                               <p className="text-[10px] font-bold text-blue-600 text-center leading-tight hover:underline cursor-pointer">
+                                  {prod.name}
+                               </p>
+                               <div className="mt-1 flex flex-col items-center gap-0.5">
+                                 <span className="text-[9px] text-gray-400 uppercase font-bold">URL:</span>
+                                 <span className="text-[8px] text-gray-400 break-all text-center">{prod.url}</span>
+                               </div>
+                            </div>
+                         </td>
+                         <td className="px-4 py-4 border-r border-gray-50 max-w-[150px]">
+                            <p className="text-[10px] text-gray-500 break-all leading-relaxed">{prod.url}</p>
+                         </td>
+                         <td className="px-4 py-4 text-center border-r border-gray-50 font-bold">{prod.kom}</td>
+                         <td className="px-2 py-4 text-center border-r border-gray-50 font-mono text-[11px]">{prod.stok.toLocaleString('id-ID')}</td>
+                         <td className="px-2 py-4 text-center border-r border-gray-50 font-bold text-gray-900">{prod.keranjang}</td>
+                         <td className="px-2 py-4 text-center border-r border-gray-50 font-bold text-gray-900">{prod.klik}</td>
+                         <td className="px-2 py-4 text-center border-r border-gray-50 font-bold text-gray-900">{prod.terjual}</td>
+                         <td className="px-4 py-4 text-center border-r border-gray-50 font-black text-gray-800">
+                            {prod.harga.toLocaleString('id-ID')}
+                         </td>
+                         <td className="px-4 py-4 text-center border-r border-gray-50 font-bold">
+                            <div className="flex items-center justify-center gap-0.5">
+                               {prod.bintang} <Star size={10} className="fill-yellow-400 text-yellow-400" />
+                            </div>
+                         </td>
+                         <td className="px-4 py-4 text-center">
+                            <button onClick={() => toggleSelect(prod.id)}>
+                               {selectedIds.includes(prod.id) ? (
+                                   <CheckSquare size={18} className="text-gk-primary" />
+                               ) : (
+                                   <Square size={18} className="text-gray-300" />
+                               )}
+                            </button>
+                         </td>
+                      </tr>
+                   ))}
+                </tbody>
+             </table>
+          </div>
+        </>
+      )}
     </div>
   );
 };

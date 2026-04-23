@@ -1,16 +1,27 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { Settings, AlertCircle, ShieldCheck } from 'lucide-react';
+import { fetchApi } from '../lib/api';
 
 export const ListAkunTreatment = () => {
-  const mockAkun = [
-    { id: 1, username: 'vip_shopee_01', namaToko: 'Kosmetik VIP Pusat', status: 'AMAN' },
-    { id: 2, username: 'fashion_mix_jkt', namaToko: 'Fashion Mix', status: 'PERLU PERHATIAN' },
-    { id: 3, username: 'gudang_baju_99', namaToko: 'Gudang Promo 99', status: 'KRITIS' },
-    { id: 4, username: 'gadget_murah_id', namaToko: 'Gadget Termurah', status: 'AMAN' },
-  ];
+  const [akunList, setAkunList] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchAccounts = async () => {
+      try {
+        const response = await fetchApi('/api/treatment/accounts');
+        setAkunList(response);
+      } catch (err) {
+        console.error('Failed to grab treatment list:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchAccounts();
+  }, []);
 
   const getStatusBadge = (status) => {
     switch(status) {
@@ -41,7 +52,11 @@ export const ListAkunTreatment = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {mockAkun.map((row) => (
+              {isLoading ? (
+                <tr><td colSpan="5" className="text-center py-6 text-gray-500 font-medium">Memuat data automasi...</td></tr>
+              ) : akunList.length === 0 ? (
+                <tr><td colSpan="5" className="text-center py-6 text-red-500 font-medium font-bold">Belum ada akun di Database Prisma Anda!</td></tr>
+              ) : akunList.map((row) => (
                 <tr key={row.id} className="hover:bg-gray-50 transition-colors">
                   <td className="px-6 py-4 text-gray-500 font-medium">#{row.id}</td>
                   <td className="px-6 py-4 font-bold text-gray-800">{row.username}</td>
