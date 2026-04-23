@@ -86,16 +86,24 @@ model User {
 }
 
 model Member {
-  id                  String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name                String          @db.VarChar(255)
-  phone               String          @unique @db.VarChar(30)
-  email               String?         @unique @db.VarChar(255)
-  bank_name           String?         @db.VarChar(100)
-  bank_account_number String?         @db.VarChar(50)
-  joined_at           DateTime        @default(now()) @db.Timestamptz
-  updated_at          DateTime        @updatedAt @db.Timestamptz
-  deleted_at          DateTime?       @db.Timestamptz
-  shopee_accounts     ShopeeAccount[]
+  id                   String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name                 String          @db.VarChar(255)
+  phone                String          @unique @db.VarChar(30)
+  email                String?         @unique @db.VarChar(255)
+  username_studio      String?         @unique @db.VarChar(100)
+  alamat               String?         @db.Text
+  bank_name            String?         @db.VarChar(100)
+  bank_account_number  String?         @db.VarChar(50)
+  // Konfigurasi Telegram Notifikasi Owner
+  telegram_token_owner String?         @db.VarChar(255)
+  chat_id_owner        String?         @db.VarChar(100)
+  // Konfigurasi Telegram Notifikasi Pesan Pembeli
+  telegram_token_pesan String?         @db.VarChar(255)
+  chat_id_pesan        String?         @db.VarChar(100)
+  joined_at            DateTime        @default(now()) @db.Timestamptz
+  updated_at           DateTime        @updatedAt @db.Timestamptz
+  deleted_at           DateTime?       @db.Timestamptz
+  shopee_accounts      ShopeeAccount[]
 
   @@map("members")
 }

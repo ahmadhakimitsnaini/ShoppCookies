@@ -185,4 +185,188 @@ export class ShopeeBot {
       }
     }
   }
+
+  // ============================================================
+  // AUTO-TREATMENT: Simulasi Perilaku Manusia (Account Warm-up)
+  // Duration: 10-15 menit per sesi
+  // ============================================================
+
+  /**
+   * Helper: Jeda acak antara min-max ms untuk meniru respons manusia.
+   */
+  async humanDelay(minMs = 1500, maxMs = 4000) {
+    const delay = minMs + Math.floor(Math.random() * (maxMs - minMs));
+    await new Promise(r => setTimeout(r, delay));
+  }
+
+  /**
+   * Helper: Scroll halaman perlahan ke bawah lalu naik kembali (meniru manusia baca).
+   */
+  async humanScroll(page, steps = 5) {
+    for (let i = 0; i < steps; i++) {
+      const scrollY = 300 + Math.floor(Math.random() * 400);
+      await page.mouse.wheel(0, scrollY);
+      await this.humanDelay(800, 2000);
+    }
+    // Scroll kembali ke atas
+    await page.mouse.wheel(0, -9999);
+    await this.humanDelay(1000, 2000);
+  }
+
+  /**
+   * Logika utama Auto-Treatment: "Jalan-jalan" di Shopee selama 10-15 menit.
+   * @param {Object} session - Object sesi dari database (berisi cookie_data)
+   * @param {Function} onLog - Callback untuk mengirim progress log (opsional)
+   * @returns {Object} { success: boolean, logs: string[], duration_ms: number }
+   */
+  async performTreatment(session, onLog = null) {
+    const startTime = Date.now();
+    const logs = [];
+    const log = (msg) => {
+      const entry = `[${new Date().toLocaleTimeString('id-ID')}] ${msg}`;
+      logs.push(entry);
+      console.log(`[TreatmentBot] @${session.account?.shopee_username ?? 'unknown'}: ${msg}`);
+      if (onLog) onLog(entry);
+    };
+
+    // Kata kunci trending untuk pencarian (umum & relevan Shopee Indonesia)
+    const TRENDING_KEYWORDS = [
+      'skincare viral', 'baju lebaran', 'hijab kekinian',
+      'celana cargo pria', 'sepatu sneakers', 'tas wanita murah',
+      'parfum original', 'jam tangan pria', 'dress midi', 'kaos polos'
+    ];
+
+    // Durasi target: 10-15 menit (600.000 - 900.000 ms)
+    const TARGET_DURATION = 600_000 + Math.floor(Math.random() * 300_000);
+    log(`🚀 Memulai treatment. Target durasi: ${Math.round(TARGET_DURATION / 60000)} menit`);
+
+    let browser, context;
+    try {
+      browser = await chromium.launch({
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-blink-features=AutomationControlled']
+      });
+
+      context = await browser.newContext({
+        userAgent: 'Mozilla/5.0 (Linux; Android 12; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.6367.82 Mobile Safari/537.36',
+        extraHTTPHeaders: { 'Accept-Language': 'id-ID,id;q=0.9' },
+        viewport: { width: 390, height: 844 } // Simulasi layar HP (iPhone 14)
+      });
+
+      // Sembunyikan tanda bot
+      await context.addInitScript(() => {
+        Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+      });
+
+      // Inject cookies akun ini
+      const cookies = this.parseCookieString(session.cookie_data);
+      await context.addCookies(cookies);
+
+      const page = await context.newPage();
+
+      // =============================================
+      // AKTIVITAS 1: Buka beranda Shopee & scroll
+      // =============================================
+      log('📱 Membuka beranda Shopee...');
+      await page.goto('https://shopee.co.id', { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await this.humanDelay(3000, 5000);
+      log('👆 Scrolling beranda...');
+      await this.humanScroll(page, 6);
+
+      // =============================================
+      // AKTIVITAS 2: Pencarian kata kunci (2-3 kali)
+      // =============================================
+      const keywordCount = 2 + Math.floor(Math.random() * 2);
+      for (let k = 0; k < keywordCount; k++) {
+        const keyword = TRENDING_KEYWORDS[Math.floor(Math.random() * TRENDING_KEYWORDS.length)];
+        log(`🔍 Mencari: "${keyword}"...`);
+
+        try {
+          await page.goto(`https://shopee.co.id/search?keyword=${encodeURIComponent(keyword)}`, { waitUntil: 'domcontentloaded', timeout: 20000 });
+          await this.humanDelay(3000, 5000);
+          await this.humanScroll(page, 4);
+
+          // Klik produk pertama secara acak (1 dari 3 produk teratas)
+          const productLinks = await page.$$('a[href*="/product/"]');
+          if (productLinks.length > 0) {
+            const randomIdx = Math.floor(Math.random() * Math.min(3, productLinks.length));
+            log(`🛍️ Mengklik produk #${randomIdx + 1} dari hasil pencarian...`);
+            await productLinks[randomIdx].click({ timeout: 5000 });
+            await this.humanDelay(4000, 7000);
+            await this.humanScroll(page, 3);
+            await page.goBack();
+            await this.humanDelay(2000, 3500);
+          }
+        } catch (e) {
+          log(`⚠️ Gagal lakukan pencarian "${keyword}": ${e.message}`);
+        }
+
+        // Jeda antar pencarian (manusia tidak langsung cari lagi)
+        await this.humanDelay(5000, 10000);
+      }
+
+      // =============================================
+      // AKTIVITAS 3: Menonton sesi Live orang lain
+      // =============================================
+      log('📺 Membuka halaman Shopee Live...');
+      try {
+        await page.goto('https://shopee.co.id/live', { waitUntil: 'domcontentloaded', timeout: 20000 });
+        await this.humanDelay(3000, 5000);
+
+        // Klik salah satu Live yang muncul di beranda
+        const liveCards = await page.$$('[class*="live-card"], [class*="stream-card"], a[href*="/live/"]');
+        if (liveCards.length > 0) {
+          const randomLive = Math.floor(Math.random() * Math.min(5, liveCards.length));
+          log(`▶️ Masuk ke sesi Live #${randomLive + 1}...`);
+          await liveCards[randomLive].click({ timeout: 5000 });
+          
+          // Tonton selama 2-5 menit (acak)
+          const watchMs = 120_000 + Math.floor(Math.random() * 180_000);
+          log(`⏱️ Menonton live selama ${Math.round(watchMs / 60000)} menit...`);
+
+          // Scroll sedikit (simulasi interaksi saat nonton)
+          await this.humanDelay(watchMs * 0.3, watchMs * 0.4);
+          await this.humanScroll(page, 2);
+
+          // Coba klik tombol Love/Like jika ada
+          const loveBtn = await page.$('[class*="love-btn"], [class*="like-btn"], [aria-label*="like"]');
+          if (loveBtn) {
+            log('❤️ Memberikan Love pada sesi Live...');
+            await loveBtn.click({ timeout: 3000 });
+          }
+
+          await this.humanDelay(watchMs * 0.5, watchMs * 0.6);
+          log('🚪 Keluar dari sesi Live...');
+        } else {
+          log('ℹ️ Tidak ada sesi Live yang bisa diklik, skip aktivitas ini.');
+        }
+      } catch (e) {
+        log(`⚠️ Aktivitas tonton Live gagal: ${e.message}`);
+      }
+
+      // =============================================
+      // AKTIVITAS 4: Kunjungi Flash Sale atau Promo
+      // =============================================
+      log('🏷️ Mengunjungi halaman Flash Sale...');
+      try {
+        await page.goto('https://shopee.co.id/flash_sale', { waitUntil: 'domcontentloaded', timeout: 20000 });
+        await this.humanDelay(3000, 5000);
+        await this.humanScroll(page, 4);
+      } catch (e) {
+        log(`⚠️ Halaman Flash Sale gagal dimuat: ${e.message}`);
+      }
+
+      const duration = Date.now() - startTime;
+      log(`✅ Treatment selesai! Durasi: ${Math.round(duration / 60000)} menit ${Math.round((duration % 60000) / 1000)} detik`);
+
+      return { success: true, logs, duration_ms: duration };
+
+    } catch (error) {
+      log(`❌ Error kritis: ${error.message}`);
+      return { success: false, logs, duration_ms: Date.now() - startTime, error: error.message };
+    } finally {
+      if (context) await context.close().catch(() => {});
+      if (browser)  await browser.close().catch(() => {});
+    }
+  }
 }

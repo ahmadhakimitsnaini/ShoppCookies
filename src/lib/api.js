@@ -57,6 +57,14 @@ export const getStudiosAnalytics = () =>
 export const getOmzetHistory = (days = 7) =>
   fetchApi(`/api/analytics/omzet-history?days=${days}`);
 
+/** Data performa server real-time: CPU, RAM, active bots, DB status */
+export const getSystemPerformance = () =>
+  fetchApi('/api/system/performance');
+
+/** Circular buffer riwayat CPU & RAM (5 menit terakhir) */
+export const getCpuHistory = () =>
+  fetchApi('/api/system/cpu-history');
+
 /**
  * Format angka ke Rupiah singkat
  * Contoh: 1500000 → "Rp 1,5jt"

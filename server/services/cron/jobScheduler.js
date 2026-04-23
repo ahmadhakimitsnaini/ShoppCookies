@@ -36,14 +36,17 @@ export const startCronJobs = () => {
       const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000);
       
       const sessionInjections = liveAccounts.map(async (acc) => {
-        const recentTask = await prisma.botTask.findFirst({
+        // Filter task_type di JS untuk menghindari Prisma v7 enum error
+        const recentTasks = await prisma.botTask.findMany({
           where: {
             account_id: acc.id,
-            task_type: 'AUTO_INJECT',
-            status: 'COMPLETED',
             created_at: { gte: sixHoursAgo }
-          }
+          },
+          take: 20
         });
+        const recentTask = recentTasks.find(
+          t => String(t.task_type) === 'AUTO_INJECT' && String(t.status) === 'COMPLETED'
+        ) ?? null;
 
         if (recentTask) {
           console.log(`[Cron] Akun @${acc.shopee_username} sudah di-injek hari ini. Skip.`);
@@ -160,6 +163,104 @@ export const startCronJobs = () => {
 
     } catch (e) {
       console.error('[Cron] Kesalahan fatal siklus sinkronisasi omzet:', e);
+    }
+  });
+
+  // ========================================================
+  // CRON 3: Auto-Treatment (Setiap 6 Jam)
+  // Menjalankan "pemanasan" akun untuk semua akun aktif
+  // yang TIDAK sedang LIVE, maksimal 2 akun paralel.
+  // ========================================================
+  console.log('[Cron] 🤖 Menjadwalkan Auto-Treatment (Setiap 6 Jam)...');
+
+  cron.schedule('0 */6 * * *', async () => {
+    console.log('\n[Cron] 🤖 Memulai siklus Auto-Treatment...');
+
+    try {
+      // Ambil akun yang: ACTIVE, punya sesi non-LIVE, belum treatment dalam 6 jam terakhir
+      const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000);
+
+      const candidates = await prisma.shopeeAccount.findMany({
+        where: {
+          status: 'ACTIVE',
+          sessions: {
+            some: {
+              status: { notIn: ['LIVE', 'EXPIRED'] }
+            }
+          }
+        },
+        include: {
+          sessions: {
+            where: { status: { notIn: ['LIVE', 'EXPIRED'] } },
+            orderBy: { created_at: 'desc' },
+            take: 1
+          },
+          // Ambil semua task lalu filter di JS (hindari Prisma v7 enum error)
+          bot_tasks: {
+            where: {
+              created_at: { gte: sixHoursAgo }
+            },
+            take: 20
+          }
+        }
+      });
+
+      // Filter di JS: hanya akun yang belum AUTO_TREATMENT dalam 6 jam terakhir
+      const toTreat = candidates.filter(acc =>
+        !acc.bot_tasks.some(t => String(t.task_type) === 'AUTO_TREATMENT')
+      );
+
+      if (toTreat.length === 0) {
+        console.log('[Cron] Semua akun sudah menjalani treatment dalam 6 jam terakhir.');
+        return;
+      }
+
+      console.log(`[Cron] ${toTreat.length} akun perlu treatment. Memproses maks. 2 paralel...`);
+
+      // Proses maksimal 2 akun sekaligus (batching)
+      const BATCH_SIZE = 2;
+      for (let i = 0; i < toTreat.length; i += BATCH_SIZE) {
+        const batch = toTreat.slice(i, i + BATCH_SIZE);
+
+        await Promise.all(batch.map(async (acc) => {
+          const session = acc.sessions[0];
+          if (!session) return;
+
+          // Buat record task
+          const task = await prisma.botTask.create({
+            data: {
+              account_id: acc.id,
+              task_type:  'AUTO_TREATMENT',
+              status:     'PROCESSING',
+            }
+          });
+
+          const bot = new ShopeeBot();
+          const result = await bot.performTreatment({ ...session, account: acc }, null);
+
+          await prisma.botTask.update({
+            where: { id: task.id },
+            data: {
+              status:      result.success ? 'COMPLETED' : 'FAILED',
+              finished_at: new Date(),
+              payload:     { logs: result.logs, duration_ms: result.duration_ms }
+            }
+          });
+
+          console.log(`[Cron] Treatment @${acc.shopee_username}: ${result.success ? '✅ Sukses' : '❌ Gagal'}`);
+        }));
+
+        // Jeda 30 detik antar batch agar server tidak panas
+        if (i + BATCH_SIZE < toTreat.length) {
+          console.log('[Cron] Jeda 30 detik sebelum batch berikutnya...');
+          await new Promise(r => setTimeout(r, 30_000));
+        }
+      }
+
+      console.log('[Cron] 🏁 Siklus Auto-Treatment selesai.');
+
+    } catch (e) {
+      console.error('[Cron] Kesalahan fatal siklus treatment:', e);
     }
   });
 };

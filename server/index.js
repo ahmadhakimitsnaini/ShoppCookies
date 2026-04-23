@@ -6,6 +6,9 @@ import studiosRoutes from './routes/studios.routes.js';
 import cookiesRoutes from './routes/cookies.routes.js';
 import treatmentRoutes from './routes/treatment.routes.js';
 import analyticsRoutes from './routes/analytics.routes.js';
+import systemRoutes from './routes/system.routes.js';
+import memberRoutes from './routes/member.routes.js';
+import accountsRoutes from './routes/accounts.routes.js';
 import { startCronJobs } from './services/cron/jobScheduler.js';
 import { startTelegramBot } from './services/telegram/TelegramBot.js';
 import { startLiveChatObserver } from './services/bot/LiveController.js';
@@ -30,6 +33,9 @@ app.use('/api/studios', studiosRoutes);
 app.use('/api/cookies', cookiesRoutes);
 app.use('/api/treatment', treatmentRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/system', systemRoutes);
+app.use('/api/members', memberRoutes);
+app.use('/api/accounts', accountsRoutes);
 
 // Global Error Handler
 app.use((err, req, res, next) => {
