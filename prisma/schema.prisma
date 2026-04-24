@@ -109,14 +109,17 @@ model Member {
 }
 
 model Studio {
-  id              String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name            String          @unique @db.VarChar(150)
-  status          StudioStatus    @default(ACTIVE)
-  created_at      DateTime        @default(now()) @db.Timestamptz
-  updated_at      DateTime        @updatedAt @db.Timestamptz
-  is_share_on     Boolean         @default(true)
-  shopee_accounts ShopeeAccount[]
-  products        StudioProduct[]
+  id               String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name             String          @unique @db.VarChar(150)
+  status           StudioStatus    @default(ACTIVE)
+  created_at       DateTime        @default(now()) @db.Timestamptz
+  updated_at       DateTime        @updatedAt @db.Timestamptz
+  is_share_on      Boolean         @default(true)
+  // Konfigurasi Bot Telegram per Studio
+  telegram_token   String?         @db.VarChar(255)
+  telegram_chat_id String?         @db.VarChar(100)
+  shopee_accounts  ShopeeAccount[]
+  products         StudioProduct[]
 
   @@map("studios")
 }

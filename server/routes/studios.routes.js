@@ -131,6 +131,240 @@ router.patch('/:id/share', async (req, res) => {
   }
 });
 
+/**
+ * PATCH /api/studios/:id/telegram
+ * Update konfigurasi bot Telegram per studio
+ */
+router.patch('/:id/telegram', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { telegram_token, telegram_chat_id } = req.body;
+
+    const updated = await prisma.studio.update({
+      where: { id },
+      data: {
+        telegram_token,
+        telegram_chat_id
+      }
+    });
+
+    // Invalidasi cache bot di NotificationService
+    const { invalidateStudioCache } = await import('../services/telegram/NotificationService.js');
+    invalidateStudioCache(id);
+
+    res.json({ success: true, data: updated });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/studios/:id/test-telegram
+ * Mengirim pesan percobaan ke Telegram studio
+ */
+router.post('/:id/test-telegram', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { sendTestNotification } = await import('../services/telegram/NotificationService.js');
+    
+    const studio = await prisma.studio.findUnique({ where: { id } });
+    const success = await sendTestNotification(id, studio.name);
+
+    if (success) {
+      res.json({ success: true, message: 'Pesan test terkirim!' });
+    } else {
+      res.status(400).json({ error: 'Gagal kirim pesan. Cek token dan chat ID Anda.' });
+    }
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/studios/:id/inject-products
+ * Trigger manual Injeksi Produk Massal untuk studio dari Dashboard (Tanpa Telegram)
+ */
+router.post('/:id/inject-products', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { clearEtalase } = req.body;
+    
+    // Import function dari ProductInjector
+    const { runProductInjection } = await import('../services/bot/ProductInjector.js');
+    
+    // Karena injeksi memakan waktu lama, kita berikan response awal ke user,
+    // lalu biarkan proses berjalan secara asinkron di background.
+    res.json({ success: true, message: 'Proses injeksi produk massal telah dimulai di latar belakang. Silakan pantau keranjang Live di HP Anda.' });
+
+    // Eksekusi asinkron tanpa ditunggu (fire and forget)
+    runProductInjection(id, { clearEtalase: clearEtalase === true })
+      .then(result => console.log(`[API] Injeksi Background Selesai:`, result))
+      .catch(err => console.error(`[API] Injeksi Background Error:`, err));
+      
+  } catch (error) {
+    console.error('Error trigger inject products:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/studios/:id/metrics
+ * Mengambil agregasi finansial total untuk 1 studio (Kartu Metrik di DetailStudio)
+ */
+router.get('/:id/metrics', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // 1. Pastikan studio ada
+    const studio = await prisma.studio.findUnique({
+      where: { id },
+      select: { id: true, name: true }
+    });
+    if (!studio) return res.status(404).json({ error: 'Studio tidak ditemukan.' });
+
+    // 2. Ambil semua ID akun di studio ini
+    const accounts = await prisma.shopeeAccount.findMany({
+      where: { studio_id: id, deleted_at: null },
+      select: { id: true }
+    });
+    const accountIds = accounts.map(a => a.id);
+
+    if (accountIds.length === 0) {
+      return res.json({ omzetTotal: 0, komisiTotal: 0, divalidasi: 0, menungguDibayar: 0, terbayar: 0, activeAccounts: 0, totalAccounts: 0 });
+    }
+
+    // 3. Ambil semua data performa, lalu kelompokkan per session_id untuk mencari puncak per sesi
+    //    PERBAIKAN BUG: Sebelumnya memakai SUM langsung → menyebabkan inflasi data karena
+    //    polling setiap 5 menit membuat satu sesi menghasilkan banyak baris.
+    //    Solusi: Ambil MAX(omzet_live) per sesi, baru jumlahkan antar sesi.
+    const allRecords = await prisma.livePerformance.findMany({
+      where: { account_id: { in: accountIds } },
+      select: { session_id: true, omzet_live: true, omzet_komisi: true, recorded_at: true }
+    });
+
+    // Kelompokkan: { sessionId → { maxOmzet, maxKomisi } }
+    const sessionPeak = {};
+    allRecords.forEach(r => {
+      const key = r.session_id ?? `no-session-${r.account_id}`;
+      if (!sessionPeak[key]) sessionPeak[key] = { omzet: 0, komisi: 0, recorded_at: r.recorded_at };
+      const o = Number(r.omzet_live   ?? 0);
+      const k = Number(r.omzet_komisi ?? 0);
+      if (o > sessionPeak[key].omzet)  sessionPeak[key].omzet  = o;
+      if (k > sessionPeak[key].komisi) sessionPeak[key].komisi = k;
+    });
+
+    // Jumlahkan puncak dari semua sesi
+    let omzetTotal  = 0;
+    let komisiTotal = 0;
+    Object.values(sessionPeak).forEach(s => {
+      omzetTotal  += s.omzet;
+      komisiTotal += s.komisi;
+    });
+
+    // 4. Hitung komisi bulan berjalan (dari sesi yang dicatat bulan ini)
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+
+    let komisiBulanIni = 0;
+    Object.values(sessionPeak).forEach(s => {
+      if (new Date(s.recorded_at) >= startOfMonth) {
+        komisiBulanIni += s.komisi;
+      }
+    });
+
+    // 5. Estimasi status pencairan
+    const divalidasi      = Math.round(komisiBulanIni * 0.20);
+    const menungguDibayar = Math.round(komisiBulanIni * 0.30);
+    const terbayar        = komisiTotal - komisiBulanIni + Math.round(komisiBulanIni * 0.50);
+
+    // 6. Hitung akun dengan sesi LIVE aktif
+    const activeAccounts = await prisma.shopeeSession.count({
+      where: { account_id: { in: accountIds }, status: 'LIVE' }
+    });
+
+    res.json({ omzetTotal, komisiTotal, divalidasi, menungguDibayar, terbayar, activeAccounts, totalAccounts: accountIds.length });
+  } catch (error) {
+    console.error('[Studios] /metrics error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/studios/:id/chart?days=30
+ * Mengambil data historis omzet harian untuk grafik di DetailStudio
+ */
+router.get('/:id/chart', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const days = Math.min(parseInt(req.query.days) || 30, 90);
+
+    // 1. Ambil semua ID akun di studio ini
+    const accounts = await prisma.shopeeAccount.findMany({
+      where: { studio_id: id, deleted_at: null },
+      select: { id: true }
+    });
+    const accountIds = accounts.map(a => a.id);
+    if (accountIds.length === 0) return res.json([]);
+
+    // 2. Rentang waktu
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    since.setHours(0, 0, 0, 0);
+
+    // 3. Ambil semua record dalam rentang (termasuk session_id, viewers, buyers)
+    const records = await prisma.livePerformance.findMany({
+      where: { account_id: { in: accountIds }, recorded_at: { gte: since } },
+      select: { session_id: true, account_id: true, omzet_live: true, omzet_komisi: true, viewers: true, buyers: true, recorded_at: true },
+      orderBy: { recorded_at: 'asc' }
+    });
+
+    // 4. Buat bucket harian kosong
+    const dailyMap = {};
+    for (let i = 0; i < days; i++) {
+      const d = new Date(Date.now() - (days - 1 - i) * 24 * 60 * 60 * 1000);
+      const key = d.toLocaleDateString('id-ID', { day: '2-digit', month: 'short' });
+      dailyMap[key] = { date: key, omzet: 0, komisi: 0, viewers: 0, buyers: 0 };
+    }
+
+    // 5. Kelompokkan per (tanggal + session_id) → cari nilai puncak (MAX) per sesi
+    //    Ini mencegah inflasi data akibat polling setiap 5 menit.
+    const sessionDayPeak = {}; // key: 'dateKey|sessionId'
+    records.forEach(r => {
+      const dateKey   = new Date(r.recorded_at).toLocaleDateString('id-ID', { day: '2-digit', month: 'short' });
+      const sessionKey = r.session_id ?? `no-session-${r.account_id}`;
+      const mapKey     = `${dateKey}|${sessionKey}`;
+
+      if (!sessionDayPeak[mapKey]) {
+        sessionDayPeak[mapKey] = { dateKey, omzet: 0, komisi: 0, viewers: 0, buyers: 0 };
+      }
+      const p = sessionDayPeak[mapKey];
+      const o = Number(r.omzet_live   ?? 0);
+      const k = Number(r.omzet_komisi ?? 0);
+      const v = Number(r.viewers      ?? 0);
+      const b = Number(r.buyers       ?? 0);
+      if (o > p.omzet)   p.omzet   = o;
+      if (k > p.komisi)  p.komisi  = k;
+      if (v > p.viewers) p.viewers = v;
+      if (b > p.buyers)  p.buyers  = b;
+    });
+
+    // 6. Akumulasikan puncak setiap sesi ke dalam bucket harian
+    Object.values(sessionDayPeak).forEach(peak => {
+      if (dailyMap[peak.dateKey]) {
+        dailyMap[peak.dateKey].omzet   += peak.omzet;
+        dailyMap[peak.dateKey].komisi  += peak.komisi;
+        dailyMap[peak.dateKey].viewers += peak.viewers;
+        dailyMap[peak.dateKey].buyers  += peak.buyers;
+      }
+    });
+
+    res.json(Object.values(dailyMap));
+  } catch (error) {
+    console.error('[Studios] /chart error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;
 
 /**

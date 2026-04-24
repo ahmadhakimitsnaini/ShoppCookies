@@ -69,12 +69,12 @@ export const InputCookies = () => {
 
     setIsSubmitting(true);
     try {
-      await fetchApi('/api/cookies/link', {
+      await fetchApi('/api/cookies/inject', {
         method: 'POST',
         body: JSON.stringify({
           account_id: selectedAccount.id,
           studio_id: selectedStudioId,
-          raw_cookie: rawCookie
+          cookie_text: rawCookie
         })
       });
 
