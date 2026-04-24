@@ -1,6 +1,7 @@
 import express from 'express';
 import prisma from '../db.js';
 import { ShopeeBot } from '../services/bot/ShopeeBot.js';
+import { sendTreatmentCompleteAlert, sendTreatmentFailedAlert } from '../services/telegram/NotificationService.js';
 
 const router = express.Router();
 
@@ -105,24 +106,34 @@ router.post('/start/:accountId', async (req, res) => {
 
     // Jalankan bot treatment secara non-blocking
     const bot = new ShopeeBot();
-    bot.performTreatment({ ...session, account }, null)
-      .then(async (result) => {
-        await prisma.botTask.update({
-          where: { id: task.id },
-          data: {
-            status:      result.success ? 'COMPLETED' : 'FAILED',
-            finished_at: new Date(),
-            payload:     { logs: result.logs, duration_ms: result.duration_ms }
-          }
-        });
-        console.log(`[Treatment] ✅ Selesai @${account.shopee_username}: ${result.success ? 'Sukses' : 'Gagal'}`);
-      })
-      .catch(async (err) => {
-        await prisma.botTask.update({
-          where: { id: task.id },
-          data: { status: 'FAILED', payload: { error: err.message } }
-        });
-      });
+        bot.performTreatment({ ...session, account }, null)
+          .then(async (result) => {
+            await prisma.botTask.update({
+              where: { id: task.id },
+              data: {
+                status:      result.success ? 'COMPLETED' : 'FAILED',
+                finished_at: new Date(),
+                payload:     { logs: result.logs, duration_ms: result.duration_ms }
+              }
+            });
+
+            // KIRIM NOTIFIKASI TELEGRAM
+            if (result.success) {
+              await sendTreatmentCompleteAlert(account, result.duration_ms);
+            } else {
+              await sendTreatmentFailedAlert(account, result.error);
+            }
+
+            console.log(`[Treatment] ✅ Selesai @${account.shopee_username}: ${result.success ? 'Sukses' : 'Gagal'}`);
+          })
+          .catch(async (err) => {
+            await prisma.botTask.update({
+              where: { id: task.id },
+              data: { status: 'FAILED', payload: { error: err.message } }
+            });
+            // Notifikasi Gagal
+            await sendTreatmentFailedAlert(account, err.message);
+          });
 
     res.json({
       success: true,

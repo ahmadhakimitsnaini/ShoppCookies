@@ -5,7 +5,7 @@ import { Input, Select } from '../components/ui/Input';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { fetchApi } from '../lib/api';
-import { Search, Eye, ExternalLink, MonitorPlay, Plus, X, Loader2, Building2 } from 'lucide-react';
+import { Search, Eye, ExternalLink, MonitorPlay, Plus, X, Loader2, Building2, Send, Settings2 } from 'lucide-react';
 
 export const ListStudio = () => {
   const navigate = useNavigate();
@@ -20,12 +20,18 @@ export const ListStudio = () => {
   const [isSaving, setIsSaving]     = useState(false);
   const [toast, setToast]           = useState(null);
 
+  // State Modal Telegram Settings
+  const [showTgModal, setShowTgModal] = useState(false);
+  const [activeStudio, setActiveStudio] = useState(null);
+  const [tgToken, setTgToken]         = useState('');
+  const [tgChatId, setTgChatId]       = useState('');
+  const [isTesting, setIsTesting]     = useState(false);
+
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 4000);
   };
 
-  // Fetch studios
   const fetchStudios = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -40,18 +46,16 @@ export const ListStudio = () => {
 
   React.useEffect(() => { fetchStudios(); }, [fetchStudios]);
 
-  // Simpan studio baru
   const handleCreateStudio = async (e) => {
     e.preventDefault();
     if (!studioName.trim()) return;
-
     setIsSaving(true);
     try {
       await fetchApi('/api/studios', {
         method: 'POST',
         body: JSON.stringify({ name: studioName.trim() })
       });
-      showToast(`Studio "${studioName}" berhasil dibuat! 🎉`, 'success');
+      showToast(`Studio "${studioName}" berhasil dibuat!`, 'success');
       setStudioName('');
       setShowModal(false);
       fetchStudios();
@@ -62,7 +66,49 @@ export const ListStudio = () => {
     }
   };
 
-  // Filtering
+  const openTelegramSettings = (studio) => {
+    setActiveStudio(studio);
+    setTgToken(studio.telegram_token || '');
+    setTgChatId(studio.telegram_chat_id || '');
+    setShowTgModal(true);
+  };
+
+  const saveTelegramSettings = async () => {
+    setIsSaving(true);
+    try {
+      await fetchApi(`/api/studios/${activeStudio.id}/telegram`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          telegram_token: tgToken,
+          telegram_chat_id: tgChatId
+        })
+      });
+      showToast('Konfigurasi Telegram berhasil disimpan!', 'success');
+      setShowTgModal(false);
+      fetchStudios();
+    } catch (err) {
+      showToast(err.message || 'Gagal menyimpan konfigurasi.', 'error');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const testTelegram = async () => {
+    if (!tgToken || !tgChatId) return showToast('Isi Token & Chat ID dulu!', 'error');
+    setIsTesting(true);
+    try {
+      await fetchApi(`/api/studios/${activeStudio.id}/test-telegram`, {
+        method: 'POST',
+        body: JSON.stringify({ token: tgToken, chatId: tgChatId })
+      });
+      showToast('Pesan test terkirim! Cek Telegram Anda.', 'success');
+    } catch (err) {
+      showToast(err.message || 'Gagal kirim pesan test.', 'error');
+    } finally {
+      setIsTesting(false);
+    }
+  };
+
   const filteredData = initialData.filter(item => {
     const namaMatch = (item.name || '').toLowerCase().includes(searchTerm.toLowerCase());
     let displayStatus = item.status === 'ACTIVE' ? 'Aktif' : 'Nonaktif';
@@ -71,83 +117,81 @@ export const ListStudio = () => {
   });
 
   const columns = [
-    { header: 'ID Studio',   cell: (row) => <span className="text-xs text-gray-400 font-mono">{row.id.substring(0, 8)}...</span> },
-    { header: 'Nama Studio', cell: (row) => <span className="font-bold whitespace-normal">{row.name}</span> },
-    { header: 'Akun Aktif',  cell: (row) => <Badge status={row.activeAccountsCount > 0 ? 'AMAN' : 'WARNING'} label={`${row.activeAccountsCount} AKUN`} /> },
-    { header: 'Total Sesi',  accessor: 'totalLiveSessions' },
+    { header: 'Nama Studio', cell: (row) => (
+      <div className="flex flex-col">
+        <span className="font-bold text-gray-800">{row.name}</span>
+        <span className="text-[10px] text-gray-400 font-mono">{row.id.substring(0, 8)}</span>
+      </div>
+    )},
+    { header: 'Bot Telegram', cell: (row) => (
+      row.telegram_token ? (
+        <Badge status="AMAN" label="AKTIF" />
+      ) : (
+        <Badge status="OFFLINE" label="BELUM SET" />
+      )
+    )},
+    { header: 'Akun',  cell: (row) => <Badge status={row.activeAccountsCount > 0 ? 'AMAN' : 'WARNING'} label={`${row.activeAccountsCount} AKUN`} /> },
+    { header: 'Total Live',  accessor: 'totalLiveSessions' },
     { header: 'Status',      cell: (row) => <Badge status={row.status === 'ACTIVE' ? 'AMAN' : 'OFFLINE'} label={row.status} /> },
-    { header: 'Eksekusi', cell: (row) => (
+    { header: 'Aksi', cell: (row) => (
       <div className="flex space-x-2">
+        <Button
+          variant="ghost" size="sm"
+          className="text-blue-600 hover:bg-blue-50"
+          onClick={() => openTelegramSettings(row)}
+          title="Setting Telegram"
+        >
+          <Send size={16} />
+        </Button>
         <Button
           variant="primary" size="sm"
           leftIcon={<Eye size={14} />}
-          className="bg-emerald-600 hover:bg-emerald-700 focus:ring-emerald-600"
+          className="bg-emerald-600 hover:bg-emerald-700"
           onClick={() => navigate(`/list-studio/${row.id}`)}
         >Detail</Button>
-        <Button
-          variant="danger" size="sm"
-          leftIcon={<ExternalLink size={14} />}
-          className="bg-orange-500 hover:bg-orange-600 focus:ring-orange-500"
-        >Cek Etalase</Button>
       </div>
     )}
   ];
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-
-      {/* Toast */}
       {toast && (
-        <div className={`fixed bottom-6 right-6 z-50 px-5 py-3 rounded-xl shadow-2xl text-sm font-medium max-w-sm ${
+        <div className={`fixed bottom-6 right-6 z-[100] px-5 py-3 rounded-xl shadow-2xl text-sm font-medium ${
           toast.type === 'success' ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'
         } animate-in slide-in-from-bottom-4`}>
           {toast.msg}
         </div>
       )}
 
-      {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end mb-6 gap-4">
         <div>
           <h1 className="text-h2 font-bold text-gk-text-main">List Studio</h1>
-          <p className="text-gk-text-muted mt-1">
-            Kelola seluruh studio operasional yang terdaftar
-            <span className="ml-2 text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">
-              {initialData.length} studio
-            </span>
-          </p>
+          <p className="text-gk-text-muted mt-1">Kelola seluruh studio operasional dan bot notifikasi</p>
         </div>
-        <Button
-          variant="primary"
-          leftIcon={<Plus size={16} />}
-          onClick={() => setShowModal(true)}
-        >
+        <Button variant="primary" leftIcon={<Plus size={16} />} onClick={() => setShowModal(true)}>
           Tambah Studio Baru
         </Button>
       </div>
 
-      {/* Tabel */}
       <Card>
         <div className="p-4 border-b border-gray-100 bg-white flex flex-col md:flex-row gap-4 items-center justify-between">
           <div className="w-full md:w-1/3 relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
-            <div className="ml-1">
-              <Input
-                placeholder="Cari nama studio..."
-                containerClassName="mb-0 w-full"
-                className="pl-9"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
+            <Input
+              placeholder="Cari nama studio..."
+              containerClassName="mb-0 w-full"
+              className="pl-10"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
           </div>
-
           <div className="w-full md:w-48">
             <Select
               containerClassName="mb-0"
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
               options={[
-                { value: 'Semua', label: 'Filter: Semua Status' },
+                { value: 'Semua', label: 'Semua Status' },
                 { value: 'Aktif', label: 'Aktif' },
                 { value: 'Nonaktif', label: 'Nonaktif' },
               ]}
@@ -156,9 +200,9 @@ export const ListStudio = () => {
         </div>
 
         <CardContent className="p-0">
-          <div className="overflow-x-auto w-full">
-            <table className="w-full text-left text-body text-gk-text-main whitespace-nowrap">
-              <thead className="bg-gray-50 border-b border-gk-border text-small font-semibold text-gk-text-muted uppercase tracking-wider">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left whitespace-nowrap">
+              <thead className="bg-gray-50 border-b text-xs font-semibold text-gray-500 uppercase tracking-wider">
                 <tr>
                   {columns.map((col, i) => (
                     <th key={i} className="px-6 py-4">{col.header}</th>
@@ -167,15 +211,10 @@ export const ListStudio = () => {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {isLoading ? (
-                  <tr>
-                    <td colSpan={columns.length} className="px-6 py-10 text-center text-gray-400">
-                      <Loader2 size={20} className="animate-spin inline mr-2" />
-                      Memuat data studio...
-                    </td>
-                  </tr>
+                  <tr><td colSpan={columns.length} className="px-6 py-10 text-center text-gray-400">Memuat data...</td></tr>
                 ) : filteredData.length > 0 ? (
                   filteredData.map((row, i) => (
-                    <tr key={i} className="hover:bg-gray-50 transition-standard">
+                    <tr key={i} className="hover:bg-gray-50 transition-colors">
                       {columns.map((col, j) => (
                         <td key={j} className="px-6 py-4">
                           {col.accessor ? row[col.accessor] : col.cell ? col.cell(row) : null}
@@ -184,118 +223,94 @@ export const ListStudio = () => {
                     </tr>
                   ))
                 ) : (
-                  <tr>
-                    <td colSpan={columns.length} className="px-6 py-16 text-center text-gk-text-muted bg-gray-50/50">
-                      <div className="flex flex-col items-center">
-                        {searchTerm ? (
-                          <>
-                            <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mb-3">
-                              <Search className="text-gray-400" size={24} />
-                            </div>
-                            <p className="text-gray-600 font-medium">Tidak ditemukan "{searchTerm}"</p>
-                          </>
-                        ) : (
-                          <>
-                            <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mb-4">
-                              <MonitorPlay className="text-blue-500" size={32} />
-                            </div>
-                            <p className="text-gray-600 font-bold text-lg mb-2">Belum ada studio</p>
-                            <p className="text-sm text-gray-500 max-w-sm mx-auto mb-4">
-                              Tambahkan studio pertama Anda untuk mulai mengelola cookies dan automasi etalase.
-                            </p>
-                            <Button variant="primary" size="sm" onClick={() => setShowModal(true)}>
-                              Tambah Studio Pertama →
-                            </Button>
-                          </>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
+                  <tr><td colSpan={columns.length} className="px-6 py-16 text-center text-gray-400">Belum ada studio.</td></tr>
                 )}
               </tbody>
             </table>
           </div>
-
-          <div className="p-4 border-t border-gray-100 bg-gray-50 flex items-center justify-between">
-            <p className="text-sm text-gray-500">
-              Menampilkan {filteredData.length} dari {initialData.length} studio
-            </p>
-            <div className="flex space-x-2">
-              <Button variant="ghost" size="sm" disabled>Prev</Button>
-              <Button variant="primary" size="sm" className="w-8 h-8 p-0 grid place-items-center">1</Button>
-              <Button variant="ghost" size="sm" disabled>Next</Button>
-            </div>
-          </div>
         </CardContent>
       </Card>
 
-      {/* ===== MODAL TAMBAH STUDIO ===== */}
+      {/* MODAL TAMBAH STUDIO */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
-
-            {/* Header */}
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md animate-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between p-6 border-b">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-blue-100 rounded-xl">
-                  <Building2 size={20} className="text-blue-600" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-bold text-gray-800">Tambah Studio Baru</h2>
-                  <p className="text-xs text-gray-500">Studio adalah ruang kerja untuk mengelola akun Shopee</p>
-                </div>
-              </div>
-              <button
-                onClick={() => { setShowModal(false); setStudioName(''); }}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-400"
-              >
-                <X size={20} />
-              </button>
+              <h2 className="text-lg font-bold">Tambah Studio Baru</h2>
+              <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
             </div>
-
-            {/* Form */}
             <form onSubmit={handleCreateStudio} className="p-6 space-y-4">
-              <Input
-                label="Nama Studio"
-                placeholder="Contoh: Studio Kosmetik VIP 001"
-                value={studioName}
-                onChange={e => setStudioName(e.target.value)}
-                helperText="Nama studio harus unik di dalam sistem."
-                autoFocus
-                required
-              />
-
-              {/* Tips */}
-              <div className="bg-blue-50 rounded-xl p-3 text-xs text-blue-700 space-y-1">
-                <p className="font-semibold">💡 Tips Penamaan Studio:</p>
-                <ul className="list-disc list-inside space-y-0.5 text-blue-600">
-                  <li>Gunakan nama yang mudah diidentifikasi, misal: <strong>Studio 01 — Kosmetik</strong></li>
-                  <li>Setiap studio bisa menampung banyak akun Shopee</li>
-                  <li>Akun Shopee bisa dipindahkan antar studio kapan saja</li>
-                </ul>
-              </div>
-
-              {/* Actions */}
+              <Input label="Nama Studio" placeholder="Studio 01" value={studioName} onChange={e => setStudioName(e.target.value)} required />
               <div className="flex justify-end gap-3 pt-2">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={() => { setShowModal(false); setStudioName(''); }}
-                >
-                  Batal
-                </Button>
-                <Button type="submit" disabled={isSaving}>
-                  {isSaving
-                    ? <><Loader2 size={15} className="animate-spin mr-2" />Menyimpan...</>
-                    : <><Plus size={15} className="mr-2" />Buat Studio</>
-                  }
-                </Button>
+                <Button type="button" variant="ghost" onClick={() => setShowModal(false)}>Batal</Button>
+                <Button type="submit" disabled={isSaving}>Buat Studio</Button>
               </div>
             </form>
           </div>
         </div>
       )}
 
+      {/* MODAL SETTINGS TELEGRAM */}
+      {showTgModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg animate-in zoom-in-95 duration-200 overflow-hidden">
+            <div className="bg-blue-600 p-6 text-white relative">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-white/20 rounded-lg"><Send size={24} /></div>
+                <div>
+                  <h2 className="text-xl font-bold">Konfigurasi Bot Studio</h2>
+                  <p className="text-blue-100 text-sm">Target: {activeStudio?.name}</p>
+                </div>
+              </div>
+              <button onClick={() => setShowTgModal(false)} className="absolute top-6 right-6 text-white/70 hover:text-white"><X size={24} /></button>
+            </div>
+            
+            <div className="p-6 space-y-5">
+              <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 flex gap-3">
+                <Settings2 className="text-blue-600 shrink-0" size={20} />
+                <p className="text-xs text-blue-800 leading-relaxed">
+                   Setiap studio memiliki Bot Telegram sendiri. Bot ini akan mengirim <b>Rekap Omzet Harian (23:59)</b>, 
+                   notifikasi <b>Cookies Expired</b>, dan status <b>Auto-Treatment</b>.
+                </p>
+              </div>
+
+              <Input 
+                label="Bot Token" 
+                placeholder="12345678:ABCDEF..." 
+                value={tgToken} 
+                onChange={e => setTgToken(e.target.value)} 
+                helperText="Dapatkan dari @BotFather"
+              />
+              <Input 
+                label="Chat ID (Group/Channel)" 
+                placeholder="-100123456..." 
+                value={tgChatId} 
+                onChange={e => setTgChatId(e.target.value)}
+                helperText="ID grup atau channel tempat bot akan memposting"
+              />
+
+              <div className="flex flex-col sm:flex-row justify-between gap-4 pt-2">
+                <Button 
+                  variant="ghost" 
+                  className="text-emerald-600 border-emerald-100 hover:bg-emerald-50"
+                  onClick={testTelegram}
+                  disabled={isTesting}
+                >
+                  {isTesting ? <Loader2 className="animate-spin mr-2" size={16} /> : <Send className="mr-2" size={16} />}
+                  Test Kirim Pesan
+                </Button>
+                <div className="flex gap-3">
+                  <Button variant="ghost" onClick={() => setShowTgModal(false)}>Batal</Button>
+                  <Button onClick={saveTelegramSettings} disabled={isSaving}>
+                    {isSaving ? <Loader2 className="animate-spin mr-2" size={16} /> : null}
+                    Simpan Perubahan
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

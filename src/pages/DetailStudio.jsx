@@ -5,34 +5,60 @@ import { Card, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Skeleton } from '../components/ui/Skeleton';
 import { ArrowLeft, ExternalLink, Download, StopCircle, RefreshCw, XCircle, Tag, ShieldAlert } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
 export const DetailStudio = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(true);
-  const [period, setPeriod] = useState(30); // 7, 30, 90
+  const [isInjecting, setIsInjecting] = useState(false);
+  const [period, setPeriod] = useState(30);
   const [chartData, setChartData] = useState([]);
+  const [metrics, setMetrics] = useState(null);
+  const [isMetricsLoading, setIsMetricsLoading] = useState(true);
 
+  // Helper: Format angka ke Rupiah singkat (Rp 84.5M / Rp 500K)
+  const formatRupiah = (num) => {
+    if (!num && num !== 0) return '-';
+    if (num >= 1_000_000_000) return `Rp ${(num / 1_000_000_000).toFixed(1)}B`;
+    if (num >= 1_000_000)     return `Rp ${(num / 1_000_000).toFixed(1)}M`;
+    if (num >= 1_000)         return `Rp ${(num / 1_000).toFixed(0)}K`;
+    return `Rp ${num.toLocaleString('id-ID')}`;
+  };
+
+  // Fetch data grafik dari backend (diganti setiap kali period atau id berubah)
   useEffect(() => {
-    setIsLoading(true);
-    // Simulate API fetch delay
-    const timer = setTimeout(() => {
-      // Generate mock chart data based on selected period
-      const data = Array.from({ length: period }).map((_, i) => {
-        const date = new Date(Date.now() - (period - i - 1) * 24 * 60 * 60 * 1000);
-        return {
-          date: date.toLocaleDateString('id-ID', { day: '2-digit', month: 'short' }),
-          rawDate: date,
-          omzet: Math.floor(Math.random() * 8000000) + 1000000, // 1M - 9M
-          komisi: Math.floor(Math.random() * 800000) + 100000 // 10% estimation
-        };
-      });
-      setChartData(data);
-      setIsLoading(false);
-    }, 600);
-    return () => clearTimeout(timer);
+    const fetchChart = async () => {
+      setIsLoading(true);
+      try {
+        const data = await fetchApi(`/api/studios/${id}/chart?days=${period}`);
+        setChartData(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.error('[DetailStudio] Gagal menarik data chart:', err);
+        setChartData([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchChart();
   }, [period, id]);
+
+  // Fetch data metrik finansial (hanya saat pertama buka atau ID berubah)
+  useEffect(() => {
+    const fetchMetrics = async () => {
+      setIsMetricsLoading(true);
+      try {
+        const data = await fetchApi(`/api/studios/${id}/metrics`);
+        setMetrics(data);
+      } catch (err) {
+        console.error('[DetailStudio] Gagal menarik metrik studio:', err);
+        setMetrics(null);
+      } finally {
+        setIsMetricsLoading(false);
+      }
+    };
+    fetchMetrics();
+  }, [id]);
 
   const yAxisTickFormatter = (value) => {
     if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
@@ -51,6 +77,26 @@ export const DetailStudio = () => {
               <span className="text-gray-600 capitalize">{entry.name}:</span>
               <span className="font-bold whitespace-nowrap" style={{ color: entry.color }}>
                 Rp {entry.value.toLocaleString('id-ID')}
+              </span>
+            </div>
+          ))}
+        </div>
+      );
+    }
+    return null;
+  };
+
+  const CustomTrafficTooltip = ({ active, payload, label }) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="bg-white p-4 border border-gray-100 rounded-lg shadow-lg">
+          <p className="font-semibold text-gray-700 mb-2">{label}</p>
+          {payload.map((entry, index) => (
+            <div key={index} className="flex items-center space-x-2 text-sm mb-1">
+              <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: entry.color }} />
+              <span className="text-gray-600">{entry.name}:</span>
+              <span className="font-bold" style={{ color: entry.color }}>
+                {Number(entry.value || 0).toLocaleString('id-ID')} orang
               </span>
             </div>
           ))}
@@ -81,6 +127,25 @@ export const DetailStudio = () => {
     loadRealData();
   }, [id]);
 
+  const handleInjectProducts = async () => {
+    if (!window.confirm('Yakin ingin mulai menginjeksi produk ke seluruh keranjang akun yang sedang LIVE di studio ini? (Bot akan mengosongkan keranjang lama terlebih dahulu)')) {
+      return;
+    }
+    
+    setIsInjecting(true);
+    try {
+      const res = await fetchApi(`/api/studios/${id}/inject-products`, {
+        method: 'POST',
+        body: JSON.stringify({ clearEtalase: true })
+      });
+      alert(res.message || 'Proses injeksi dimulai di latar belakang.');
+    } catch (err) {
+      alert(err.message || 'Gagal memulai injeksi produk.');
+    } finally {
+      setIsInjecting(false);
+    }
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-2">
@@ -101,23 +166,62 @@ export const DetailStudio = () => {
         </div>
         <div className="mt-4 sm:mt-0 flex space-x-2">
            <Button 
-             variant="primary" 
+             variant="outline" 
+             className="border-indigo-600 text-indigo-700 hover:bg-indigo-50"
              leftIcon={<Tag size={16} />}
              onClick={() => navigate(`/list-studio/${id}/produk`)}
            >
-             Brankas Produk (Fase 10)
+             Brankas Produk
            </Button>
-           <Button variant="danger" leftIcon={<ExternalLink size={16} />}>Kunjungi Toko</Button>
+           <Button 
+             variant="primary" 
+             leftIcon={<RefreshCw size={16} className={isInjecting ? "animate-spin" : ""} />}
+             onClick={handleInjectProducts}
+             disabled={isInjecting}
+             className="bg-indigo-600 hover:bg-indigo-700"
+           >
+             {isInjecting ? "Memulai Bot..." : "Inject Massal (Bot)"}
+           </Button>
         </div>
       </div>
 
       {/* Metric Cards Horizontal Scrollable */}
       <div className="flex space-x-4 overflow-x-auto pb-2 snap-x hide-scrollbar">
-        <div className="snap-start"><StatBlock title="Omzet Total" value="Rp 84.5M" bgColor="bg-purple-600" textColor="text-white" /></div>
-        <div className="snap-start"><StatBlock title="Estimasi Komisi" value="Rp 8.4M" bgColor="bg-teal-500" textColor="text-white" /></div>
-        <div className="snap-start"><StatBlock title="Sedang Divalidasi" value="Rp 2.1M" bgColor="bg-blue-400" textColor="text-white" /></div>
-        <div className="snap-start"><StatBlock title="Menunggu Dibayar" value="Rp 4.3M" bgColor="bg-amber-500" textColor="text-white" /></div>
-        <div className="snap-start"><StatBlock title="Terbayar" value="Rp 34.2M" bgColor="bg-blue-900" textColor="text-white" /></div>
+        <div className="snap-start">
+          <StatBlock
+            title="Omzet Total"
+            value={isMetricsLoading ? 'Memuat...' : formatRupiah(metrics?.omzetTotal ?? 0)}
+            bgColor="bg-purple-600" textColor="text-white"
+          />
+        </div>
+        <div className="snap-start">
+          <StatBlock
+            title="Estimasi Komisi"
+            value={isMetricsLoading ? 'Memuat...' : formatRupiah(metrics?.komisiTotal ?? 0)}
+            bgColor="bg-teal-500" textColor="text-white"
+          />
+        </div>
+        <div className="snap-start">
+          <StatBlock
+            title="Sedang Divalidasi *"
+            value={isMetricsLoading ? 'Memuat...' : formatRupiah(metrics?.divalidasi ?? 0)}
+            bgColor="bg-blue-400" textColor="text-white"
+          />
+        </div>
+        <div className="snap-start">
+          <StatBlock
+            title="Menunggu Dibayar *"
+            value={isMetricsLoading ? 'Memuat...' : formatRupiah(metrics?.menungguDibayar ?? 0)}
+            bgColor="bg-amber-500" textColor="text-white"
+          />
+        </div>
+        <div className="snap-start">
+          <StatBlock
+            title="Terbayar *"
+            value={isMetricsLoading ? 'Memuat...' : formatRupiah(metrics?.terbayar ?? 0)}
+            bgColor="bg-blue-900" textColor="text-white"
+          />
+        </div>
       </div>
 
       <Card>
@@ -188,6 +292,38 @@ export const DetailStudio = () => {
                   dot={period <= 30 ? { r: 3, strokeWidth: 0, fill: '#14b8a6' } : false}
                 />
               </LineChart>
+            </ResponsiveContainer>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Grafik Traffic Harian */}
+      <Card>
+        <div className="p-4 sm:p-6 border-b border-gray-100 flex flex-col sm:flex-row justify-between items-start sm:items-center">
+          <div>
+            <h3 className="text-lg font-bold text-gk-text-main">Grafik Traffic Live Harian</h3>
+            <p className="text-xs text-gray-500 mt-1">Puncak penonton & pembeli per hari (akumulasi semua akun)</p>
+          </div>
+          <div className="flex items-center gap-2 mt-3 sm:mt-0">
+            <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-full px-3 py-1 font-semibold">
+              Periode: {period} Hari
+            </span>
+          </div>
+        </div>
+        <CardContent className="p-6 h-[300px]">
+          {isLoading ? (
+            <Skeleton className="w-full h-full" />
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+                <XAxis dataKey="date" fontSize={11} tickMargin={10} stroke="#9CA3AF" minTickGap={20} />
+                <YAxis fontSize={11} stroke="#9CA3AF" tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(0)}K` : v} />
+                <Tooltip content={<CustomTrafficTooltip />} />
+                <Legend verticalAlign="top" height={36} iconType="circle" />
+                <Bar name="Penonton" dataKey="viewers" fill="#f97316" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                <Bar name="Pembeli" dataKey="buyers" fill="#38bdf8" radius={[4, 4, 0, 0]} maxBarSize={40} />
+              </BarChart>
             </ResponsiveContainer>
           )}
         </CardContent>
