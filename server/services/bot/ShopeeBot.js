@@ -49,6 +49,73 @@ export class ShopeeBot {
   }
 
   /**
+   * RADAR DETEKSI: Mengecek apakah akun sedang aktif siaran Live.
+   * Fungsi ringan: hanya membuka halaman list, tanpa mengekstrak omzet.
+   * Dipakai oleh CRON 4 (Radar, setiap 15 menit).
+   * @returns {Object} { isLive: boolean, status: 'LIVE'|'ACTIVE'|'EXPIRED'|'ERROR' }
+   */
+  async checkIsLive(session) {
+    console.log(`[Radar] 🔭 Mengecek status siaran @${session.account?.shopee_username ?? session.id.substring(0,8)}...`);
+
+    let context;
+    try {
+      const browser = await chromium.launch({
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-blink-features=AutomationControlled']
+      });
+
+      context = await browser.newContext({
+        userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+      });
+
+      await context.addInitScript(() => {
+        Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+      });
+
+      const parsedCookies = this.parseCookieString(session.raw_cookie_encrypted);
+      await context.addCookies(parsedCookies);
+
+      const page = await context.newPage();
+
+      // Navigasi ke halaman list siaran Live milik akun ini
+      await page.goto('https://creator.shopee.co.id/portal/live/list', {
+        waitUntil: 'domcontentloaded',
+        timeout: 40000
+      });
+      await page.waitForTimeout(2500 + Math.floor(Math.random() * 1500));
+
+      // Cek apakah akun ditendang ke halaman login (Cookie Expired)
+      const currentUrl = page.url();
+      if (currentUrl.includes('/login') || currentUrl.includes('passport')) {
+        console.log(`[Radar] 🔴 Cookie EXPIRED terdeteksi.`);
+        return { isLive: false, status: 'EXPIRED' };
+      }
+
+      // Deteksi indikator siaran aktif dari teks di halaman:
+      // Shopee biasanya menampilkan badge "Sedang Berlangsung" atau "LIVE" pada kartu sesi aktif
+      const isLiveDetected = await page.evaluate(() => {
+        const bodyText = document.body.innerText.toLowerCase();
+        const indicators = ['sedang berlangsung', 'on air', 'live now', 'siaran berlangsung'];
+        return indicators.some(keyword => bodyText.includes(keyword));
+      });
+
+      if (isLiveDetected) {
+        console.log(`[Radar] 📡 Siaran LIVE terdeteksi! Mengubah status...`);
+        return { isLive: true, status: 'LIVE' };
+      } else {
+        console.log(`[Radar] 💤 Tidak ada siaran aktif. Status: OFFLINE (Siaga).`);
+        return { isLive: false, status: 'OFFLINE' };
+      }
+
+    } catch (err) {
+      console.error(`[Radar] ❌ Error saat deteksi siaran:`, err.message);
+      return { isLive: false, status: 'ERROR' };
+    } finally {
+      if (context) await context.close().catch(() => {});
+    }
+  }
+
+  /**
    * Menginjeksi cookie, masuk ke Shopee Creator Dashboard,
    * lalu mengambil data omzet live secara asli dari DOM.
    * Hasilnya bisa disimpan per jam ke tabel live_performances.
@@ -84,6 +151,52 @@ export class ShopeeBot {
       await context.addCookies(parsedCookies);
 
       const page = await context.newPage();
+      
+      // === API INTERCEPTION (Menangkap Jalur Belakang) ===
+      let interceptedProducts = [];
+      page.on('response', async (response) => {
+        const url = response.url();
+        // Coba tangkap request API Shopee terkait live metrics / items
+        if (url.includes('api/v') && (url.includes('live') || url.includes('item') || url.includes('product'))) {
+          try {
+            const json = await response.json();
+            const str = JSON.stringify(json);
+            
+            // Cek jika response memiliki ciri-ciri array produk
+            if (str.includes('product_id') || str.includes('item_id')) {
+              // Fungsi rekursif untuk mencari array di kedalaman JSON
+              const findArray = (obj) => {
+                if (Array.isArray(obj) && obj.length > 0 && (obj[0].product_id || obj[0].item_id || obj[0].name)) return obj;
+                if (typeof obj === 'object' && obj !== null) {
+                  for (let key in obj) {
+                     const found = findArray(obj[key]);
+                     if (found) return found;
+                  }
+                }
+                return null;
+              };
+              
+              const productsArray = findArray(json);
+              if (productsArray && productsArray.length > 0) {
+                // Konversi key API Shopee ke struktur standar kita
+                interceptedProducts = productsArray.map(p => ({
+                   id: p.item_id || p.product_id || p.id || Math.random().toString(),
+                   name: p.name || p.product_name || p.title || 'Produk',
+                   image: p.image || p.cover || p.image_url || 'https://via.placeholder.com/100',
+                   harga: p.price || p.current_price || p.min_price || 0,
+                   stok: p.stock || p.available_stock || p.normal_stock || 0,
+                   klik: p.clicks || p.item_clicks || 0,
+                   keranjang: p.add_to_cart || p.cart_adds || 0,
+                   terjual: p.sold || p.orders || p.sales || 0,
+                   kom: p.commission_rate || p.commission || 0,
+                   url: p.url || p.product_url || '#'
+                }));
+                console.log(`[Bot] 🕵️‍♂️ [API Interception] Berhasil menyadap ${interceptedProducts.length} produk dari jalur belakang!`);
+              }
+            }
+          } catch(e) { /* Abaikan response yang gagal diparse */ }
+        }
+      });
       
       // === LANGKAH 1: Navigasi ke Dashboard Creator ===
       console.log(`[Bot] Navigasi ke creator.shopee.co.id...`);
@@ -163,6 +276,14 @@ export class ShopeeBot {
       const buyers        = parseInt(crawledData.buyers_raw.replace(/\D/g, '')) || 0;
       const live_title    = crawledData.live_title || 'Live Session';
 
+      // === Deteksi Akhir Siaran (End of Stream) ===
+      // Jika semua metrik utama bernilai 0, sangat mungkin siaran telah ditutup.
+      // Kita kembalikan status 'ENDED' agar Cron Job bisa memulangkan sesi ke ACTIVE.
+      if (omzet_live === 0 && viewers === 0 && buyers === 0) {
+        console.log(`[Bot] 🏁 @${session.account?.shopee_username ?? session.id.substring(0,8)}: Semua metrik 0 — siaran kemungkinan telah ditutup.`);
+        return { status: 'ENDED' };
+      }
+
       console.log(`[Bot] 📊 Hasil: Omzet=Rp${omzet_live.toLocaleString('id-ID')}, Komisi=Rp${omzet_komisi.toLocaleString('id-ID')}, Viewers=${viewers}, Buyers=${buyers}`);
 
       return { 
@@ -171,7 +292,8 @@ export class ShopeeBot {
         omzet_komisi,
         viewers,
         buyers,
-        live_title
+        live_title,
+        live_cart_snapshot: interceptedProducts
       };
 
     } catch (error) {

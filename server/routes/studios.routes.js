@@ -395,6 +395,8 @@ router.get('/:id/details', async (req, res) => {
 
       return {
         id: acc.id.substring(0, 8).toUpperCase(),
+        account_id: acc.id,
+        username: acc.shopee_username,
         studio_id: acc.studio_id || id, // ID Studio asli untuk navigasi produk
         status: {
            isLive: session ? session.status === 'LIVE' : false,
@@ -452,7 +454,7 @@ router.get('/:id/products', async (req, res) => {
     }
 
     const products = await prisma.studioProduct.findMany({
-      where: { studio_id: studioId },
+      where: { studio_id: studioId, account_id: null },
       orderBy: { order_index: 'asc' }
     });
     res.json(products);
@@ -559,49 +561,41 @@ router.delete('/:id/products/:productId', async (req, res) => {
  */
 router.get('/:id/live-etalase', async (req, res) => {
   try {
-    const mockEtalase = [
-      {
-        id: 1,
-        image: "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=100&q=80",
-        name: "PROMO 5.5 KELFI SETELAN / SET BAJU ANAK CEWEK BORDIR",
-        url: "https://shopee.co.id/product/163001621/14931759796",
-        kom: 2,
-        stok: 591,
-        keranjang: 13,
-        klik: 18,
-        terjual: 0,
-        harga: 28600,
-        bintang: 4.9
+    const activeSessions = await prisma.shopeeSession.findMany({
+      where: {
+        status: 'LIVE',
+        account: { studio_id: req.params.id }
       },
-      {
-        id: 2,
-        image: "https://images.unsplash.com/photo-1539109132305-3c11375d4a6c?w=100&q=80",
-        name: "ROK PLISKET KANCING ANAK PEREMPUAN 4-14 TAHUN",
-        url: "https://shopee.co.id/product/293075991/7278750492",
-        kom: 1,
-        stok: 137291,
-        keranjang: 2,
-        klik: 10,
-        terjual: 0,
-        harga: 25000,
-        bintang: 4.7
-      },
-      {
-        id: 3,
-        image: "https://images.unsplash.com/photo-1512436991641-6745cdb1723f?w=100&q=80",
-        name: "BabyToys Mainan Ring Donat Susun Putar Anak Bayi Jumbo",
-        url: "https://shopee.co.id/product/346014230/43072757889",
-        kom: 6,
-        stok: 124844,
-        keranjang: 4,
-        klik: 10,
-        terjual: 0,
-        harga: 36990,
-        bintang: 4.9
+      include: {
+        account: { select: { shopee_username: true } }
       }
-    ];
-    res.json(mockEtalase);
+    });
+
+    let combinedEtalase = [];
+    
+    for (const session of activeSessions) {
+      if (session.live_cart_snapshot) {
+        let snapshot = session.live_cart_snapshot;
+        if (typeof snapshot === 'string') {
+          try { snapshot = JSON.parse(snapshot); } catch(e) { snapshot = []; }
+        }
+        if (Array.isArray(snapshot)) {
+          // Tambahkan identitas akun agar pengguna tahu produk ini milik siapa
+          const taggedProducts = snapshot.map(p => ({
+            ...p,
+            account_username: session.account.shopee_username
+          }));
+          combinedEtalase = combinedEtalase.concat(taggedProducts);
+        }
+      }
+    }
+    
+    // Urutkan berdasarkan yang paling banyak terjual
+    combinedEtalase.sort((a, b) => (b.terjual || 0) - (a.terjual || 0));
+
+    res.json(combinedEtalase);
   } catch (err) {
+    console.error('[Studios] GET live-etalase error:', err);
     res.status(500).json({ error: 'Gagal mengambil data etalase live.' });
   }
 });

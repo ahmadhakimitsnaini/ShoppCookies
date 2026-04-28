@@ -43,7 +43,7 @@ router.post('/inject', async (req, res) => {
         account_id,
         raw_cookie_encrypted: cookie_text,
         user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)",
-        status: 'LIVE'
+        status: 'OFFLINE' // Siaga — Cron Radar akan mengubahnya ke LIVE saat siaran terdeteksi
       }
     });
 

@@ -95,11 +95,23 @@ export const startCronJobs = () => {
             // Perbarui timestamp last_sync_at agar urutan antrean selalu fresh
             await prisma.shopeeSession.update({
               where: { id: session.id },
-              data: { last_sync_at: new Date() }
+              data: { 
+                last_sync_at: new Date(),
+                ...(result.live_cart_snapshot && result.live_cart_snapshot.length > 0 && { live_cart_snapshot: result.live_cart_snapshot })
+              }
+            });
+
+          } else if (result.status === 'ENDED') {
+            // === Skenario: Siaran Telah Ditutup ===
+            console.log(`[Cron] 🏁 @${username}: Siaran selesai. Memulangkan status ke OFFLINE (Siaga)...`);
+
+            await prisma.shopeeSession.update({
+              where: { id: session.id },
+              data: { status: 'OFFLINE' }
             });
 
           } else {
-            // === Skenario: Error saat scraping (jaringan, struktur HTML berubah, dll) ===
+            // === Skenario: Error saat scraping ===
             console.warn(`[Cron] ⚠️  @${username}: Status tidak dikenali atau error — ${result.error ?? 'Unknown'}`);
           }
 
@@ -211,5 +223,94 @@ export const startCronJobs = () => {
     }
   }, { timezone: "Asia/Jakarta" });
 
+
+  // ============================================================
+  // CRON 4: RADAR DETEKSI LIVE (Setiap 15 Menit)
+  // Memindai akun ACTIVE (Siaga) untuk mendeteksi siaran baru.
+  // Jika siaran ditemukan → ubah status ke LIVE agar Cron 1 mulai memantau.
+  // Efisiensi: proses 1 per 1 agar RAM tidak meledak.
+  // ============================================================
+  cron.schedule('*/15 * * * *', async () => {
+    console.log('[Cron] 📡 [Radar] Memulai putaran deteksi siaran baru...');
+
+    if (global.__radarDetectionRunning) {
+      console.log('[Cron] ⏳ [Radar] Putaran sebelumnya masih berjalan, dilewati.');
+      return;
+    }
+    global.__radarDetectionRunning = true;
+
+    try {
+      const { sendCookieExpiredAlert } = await import('../telegram/NotificationService.js');
+
+      // Ambil semua sesi yang berstatus OFFLINE (Siaga / Off) beserta data akunnya
+      const activeSessions = await prisma.shopeeSession.findMany({
+        where: { status: 'OFFLINE' },
+        include: {
+          account: {
+            select: {
+              id: true,
+              shopee_username: true,
+              shopee_shop_name: true,
+              studio_id: true,
+            }
+          }
+        },
+        orderBy: { updated_at: 'asc' }
+      });
+
+      if (activeSessions.length === 0) {
+        console.log('[Cron] ℹ️  [Radar] Tidak ada sesi OFFLINE yang perlu dipindai.');
+        return;
+      }
+
+      console.log(`[Cron] 📋 [Radar] Memindai ${activeSessions.length} sesi OFFLINE...`);
+
+      for (const session of activeSessions) {
+        const username = session.account?.shopee_username ?? session.id.substring(0, 8);
+
+        try {
+          const bot = new ShopeeBot();
+          const result = await bot.checkIsLive(session);
+
+          if (result.status === 'LIVE') {
+            // === Siaran Baru Terdeteksi! ===
+            console.log(`[Cron] 🔴 [Radar] @${username}: SIARAN DIMULAI! Mengubah status ke LIVE...`);
+            await prisma.shopeeSession.update({
+              where: { id: session.id },
+              data: { status: 'LIVE', last_sync_at: new Date() }
+            });
+            // Cron 1 (Monitor Omzet) akan mengambil alih pada putaran 5 menit berikutnya.
+
+          } else if (result.status === 'EXPIRED') {
+            // === Cookie mati saat dalam posisi Siaga ===
+            console.log(`[Cron] 🔴 [Radar] @${username}: Cookie EXPIRED. Menonaktifkan...`);
+            await prisma.shopeeSession.update({
+              where: { id: session.id },
+              data: { status: 'EXPIRED', expired_at: new Date() }
+            });
+            if (session.account) await sendCookieExpiredAlert(session.account);
+
+          }
+          // Jika result.status === 'OFFLINE': tidak perlu update DB, biarkan siaga.
+
+        } catch (err) {
+          console.error(`[Cron] ❌ [Radar] Error scanning @${username}:`, err.message);
+        }
+
+        // Jeda antar-akun: 10-15 detik
+        const jeda = 10000 + Math.floor(Math.random() * 5000);
+        await new Promise(r => setTimeout(r, jeda));
+      }
+
+      console.log(`[Cron] ✅ [Radar] Putaran selesai. ${activeSessions.length} sesi telah dipindai.`);
+
+    } catch (err) {
+      console.error('[Cron] ❌ Fatal error pada Radar Deteksi:', err.message);
+    } finally {
+      global.__radarDetectionRunning = false;
+    }
+  });
+
   console.log('✅ [Scheduler] Semua sistem otomasi cron telah mengudara.');
 };
+
