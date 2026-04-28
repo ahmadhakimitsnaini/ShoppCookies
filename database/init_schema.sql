@@ -15,7 +15,7 @@ CREATE TYPE studio_status       AS ENUM ('ACTIVE', 'MAINTENANCE');
 CREATE TYPE account_status      AS ENUM ('ACTIVE', 'INACTIVE', 'BANNED'); -- BARU: Status fungsional toko
 CREATE TYPE account_health      AS ENUM ('EXCELLENT', 'WARNING', 'CRITICAL');
 CREATE TYPE session_status      AS ENUM ('LIVE', 'OFFLINE', 'EXPIRED');
-CREATE TYPE bot_task_type       AS ENUM ('SYNC_OMZET', 'AUTO_TREATMENT', 'STOP_LIVE', 'CHECK_COOKIE');
+CREATE TYPE bot_task_type       AS ENUM ('SYNC_OMZET', 'AUTO_TREATMENT', 'STOP_LIVE', 'CHECK_COOKIE', 'AUTO_INJECT');
 CREATE TYPE bot_task_status     AS ENUM ('PENDING', 'PROCESSING', 'COMPLETED', 'FAILED');
 
 
@@ -38,19 +38,25 @@ COMMENT ON TABLE  users           IS 'Akun login internal untuk admin dan operat
 
 
 -- ============================================================
--- 2. TABEL: members
+-- 2. TABEL: Members
 -- ============================================================
 
 CREATE TABLE members (
-    id                  UUID            PRIMARY KEY DEFAULT gen_random_uuid(),
-    name                VARCHAR(255)    NOT NULL,
-    phone               VARCHAR(30)     NOT NULL UNIQUE,
-    email               VARCHAR(255)    UNIQUE,
-    bank_name           VARCHAR(100),
-    bank_account_number VARCHAR(50),
-    joined_at           TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
-    updated_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(), -- BARU
-    deleted_at          TIMESTAMPTZ                             -- BARU: Soft Delete
+    id                   UUID            PRIMARY KEY DEFAULT gen_random_uuid(),
+    name                 VARCHAR(255)    NOT NULL,
+    phone                VARCHAR(30)     NOT NULL UNIQUE,
+    email                VARCHAR(255)    UNIQUE,
+    username_studio      VARCHAR(100)    UNIQUE,
+    alamat               TEXT,
+    bank_name            VARCHAR(100),
+    bank_account_number  VARCHAR(50),
+    telegram_token_owner VARCHAR(255),
+    chat_id_owner        VARCHAR(100),
+    telegram_token_pesan VARCHAR(255),
+    chat_id_pesan        VARCHAR(100),
+    joined_at            TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+    updated_at           TIMESTAMPTZ     NOT NULL DEFAULT NOW(), -- BARU
+    deleted_at           TIMESTAMPTZ                             -- BARU: Soft Delete
 );
 
 COMMENT ON TABLE  members IS 'Data mitra riil pemilik akun/toko Shopee yang bergabung ke platform.';
@@ -61,11 +67,14 @@ COMMENT ON TABLE  members IS 'Data mitra riil pemilik akun/toko Shopee yang berg
 -- ============================================================
 
 CREATE TABLE studios (
-    id          UUID            PRIMARY KEY DEFAULT gen_random_uuid(),
-    name        VARCHAR(150)    NOT NULL UNIQUE,
-    status      studio_status   NOT NULL DEFAULT 'ACTIVE',
-    created_at  TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
-    updated_at  TIMESTAMPTZ     NOT NULL DEFAULT NOW()  -- BARU
+    id               UUID            PRIMARY KEY DEFAULT gen_random_uuid(),
+    name             VARCHAR(150)    NOT NULL UNIQUE,
+    status           studio_status   NOT NULL DEFAULT 'ACTIVE',
+    created_at       TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+    updated_at       TIMESTAMPTZ     NOT NULL DEFAULT NOW(), -- BARU
+    is_share_on      BOOLEAN         NOT NULL DEFAULT true,
+    telegram_token   VARCHAR(255),
+    telegram_chat_id VARCHAR(100)
 );
 
 COMMENT ON TABLE  studios IS 'Representasi studio fisik atau virtual tempat Shopee Live dijalankan.';
@@ -84,6 +93,7 @@ CREATE TABLE shopee_accounts (
     status              account_status  NOT NULL DEFAULT 'ACTIVE', -- BARU: Status level toko (Anti ban bot spam)
     health_status       account_health  NOT NULL DEFAULT 'EXCELLENT',
     total_sessions      INT             NOT NULL DEFAULT 0 CHECK (total_sessions >= 0),
+    use_custom_vault    BOOLEAN         NOT NULL DEFAULT false,
     created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
     updated_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
     deleted_at          TIMESTAMPTZ,                            -- BARU: Soft Delete
@@ -115,6 +125,7 @@ CREATE TABLE shopee_sessions (
     health_score            SMALLINT        NOT NULL DEFAULT 100
                                             CHECK (health_score BETWEEN 1 AND 100),
     last_sync_at            TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+    live_cart_snapshot      JSONB           DEFAULT '[]',
     expired_at              TIMESTAMPTZ,
     created_at              TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
     updated_at              TIMESTAMPTZ     NOT NULL DEFAULT NOW(), -- BARU
@@ -189,6 +200,33 @@ CREATE TABLE bot_tasks (
     finished_at TIMESTAMPTZ,
 
     CONSTRAINT fk_bot_tasks_account
+        FOREIGN KEY (account_id)
+        REFERENCES shopee_accounts(id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
+);
+
+
+-- ============================================================
+-- 9. TABEL: studio_products
+-- ============================================================
+
+CREATE TABLE studio_products (
+    id              UUID            PRIMARY KEY DEFAULT gen_random_uuid(),
+    studio_id       UUID            NOT NULL,
+    account_id      UUID,
+    product_url     TEXT            NOT NULL,
+    product_name    VARCHAR(255),
+    order_index     INT             NOT NULL DEFAULT 0,
+    created_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT fk_studio_products_studio
+        FOREIGN KEY (studio_id)
+        REFERENCES studios(id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+
+    CONSTRAINT fk_studio_products_account
         FOREIGN KEY (account_id)
         REFERENCES shopee_accounts(id)
         ON DELETE CASCADE

@@ -125,14 +125,16 @@ model Studio {
 }
 
 model StudioProduct {
-  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  studio_id    String   @db.Uuid
-  product_url  String   @db.Text
-  product_name String?  @db.VarChar(255)
-  order_index  Int      @default(0)
-  created_at   DateTime @default(now()) @db.Timestamptz
+  id           String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  studio_id    String         @db.Uuid
+  account_id   String?        @db.Uuid  // NULL = Brankas Master Studio | Terisi = Brankas Mandiri Akun
+  product_url  String         @db.Text
+  product_name String?        @db.VarChar(255)
+  order_index  Int            @default(0)
+  created_at   DateTime       @default(now()) @db.Timestamptz
   
-  studio       Studio   @relation(fields: [studio_id], references: [id], onDelete: Cascade)
+  studio       Studio         @relation(fields: [studio_id], references: [id], onDelete: Cascade)
+  account      ShopeeAccount? @relation(fields: [account_id], references: [id], onDelete: Cascade)
   @@map("studio_products")
 }
 
@@ -145,6 +147,7 @@ model ShopeeAccount {
   status           AccountStatus   @default(ACTIVE)
   health_status    AccountHealth   @default(EXCELLENT)
   total_sessions   Int             @default(0)
+  use_custom_vault Boolean         @default(false)  // Jika true, bot akan pakai Brankas Mandiri akun ini
   created_at       DateTime        @default(now()) @db.Timestamptz
   updated_at       DateTime        @updatedAt @db.Timestamptz
   deleted_at       DateTime?       @db.Timestamptz
@@ -155,6 +158,7 @@ model ShopeeAccount {
   performances     LivePerformance[]
   violations       AccountViolation[]
   bot_tasks        BotTask[]
+  custom_products  StudioProduct[] // Relasi ke produk Brankas Mandiri akun ini
 
   @@map("shopee_accounts")
 }
@@ -167,6 +171,7 @@ model ShopeeSession {
   status               SessionStatus   @default(LIVE)
   health_score         Int             @default(100) @db.SmallInt
   last_sync_at         DateTime        @default(now()) @db.Timestamptz
+  live_cart_snapshot   Json?           @default("[]")
   expired_at           DateTime?       @db.Timestamptz
   created_at           DateTime        @default(now()) @db.Timestamptz
   updated_at           DateTime        @updatedAt @db.Timestamptz
