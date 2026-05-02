@@ -312,7 +312,8 @@ export const runProductInjection = async (idOrUsername, options = { clearEtalase
         ? { id: idOrUsername, deleted_at: null }
         : { shopee_username: idOrUsername, deleted_at: null },
       include: {
-        studio: { include: { products: { orderBy: { order_index: 'asc' } } } },
+        studio: { include: { products: { where: { account_id: null }, orderBy: { order_index: 'asc' } } } },
+        custom_products: { orderBy: { order_index: 'asc' } }, // Brankas Mandiri akun ini
         sessions: {
           where: { status: 'LIVE' },
           orderBy: { created_at: 'desc' },
@@ -328,10 +329,11 @@ export const runProductInjection = async (idOrUsername, options = { clearEtalase
       const studio = await prisma.studio.findUnique({
         where: { id: idOrUsername },
         include: {
-          products: { orderBy: { order_index: 'asc' } },
+          products: { where: { account_id: null }, orderBy: { order_index: 'asc' } }, // Brankas Master Studio
           shopee_accounts: {
             where: { deleted_at: null },
             include: {
+              custom_products: { orderBy: { order_index: 'asc' } }, // Brankas Mandiri tiap akun
               sessions: {
                 where: { status: 'LIVE' },
                 orderBy: { created_at: 'desc' },
@@ -354,12 +356,27 @@ export const runProductInjection = async (idOrUsername, options = { clearEtalase
         return { success: false, message: `Studio '${studio.name}' belum memiliki daftar produk. Tambahkan produk terlebih dahulu.` };
       }
 
-      // Gabungkan produk studio ke setiap akun
-      targets = studio.shopee_accounts.map(acc => ({
-        ...acc,
-        studio: { products: studio.products }
-      }));
+      // === LOGIKA MASTER & OVERRIDE ===
+      // Tiap akun mendapat produk yang sesuai:
+      //   - Jika use_custom_vault = true  → pakai Brankas Mandiri akun (custom_products)
+      //   - Jika use_custom_vault = false → pakai Brankas Master Studio (studio.products)
+      targets = studio.shopee_accounts.map(acc => {
+        const useCustom = acc.use_custom_vault && acc.custom_products?.length > 0;
+        const selectedProducts = useCustom ? acc.custom_products : studio.products;
+
+        if (useCustom) {
+          console.log(`[Injector] 🔒 @${acc.shopee_username}: Menggunakan Brankas Mandiri (${selectedProducts.length} produk).`);
+        } else {
+          console.log(`[Injector] 📦 @${acc.shopee_username}: Menggunakan Brankas Master Studio (${selectedProducts.length} produk).`);
+        }
+
+        return {
+          ...acc,
+          studio: { products: selectedProducts }
+        };
+      });
     }
+
 
     if (targets.length === 0) {
       return { success: false, message: `Target '${idOrUsername}' tidak ditemukan.` };
