@@ -369,63 +369,108 @@ export default router;
 
 /**
  * GET /api/studios/:id/details
- * Menarik seluruh data bersarang (Accounts -> Sessions -> Performances) untuk halaman DetailStudio.jsx
+ * Menarik seluruh data bersarang (Accounts → Sessions → Performances) untuk halaman DetailStudio.jsx
+ * Versi ini sudah bersih dari Math.random() dan nilai hardcode.
  */
 router.get('/:id/details', async (req, res) => {
   try {
     const { id } = req.params;
     const accounts = await prisma.shopeeAccount.findMany({
-      where: { studio_id: id },
+      where: { studio_id: id, deleted_at: null },
       include: {
+        member: {                          // ← untuk bank_name & nama pemilik
+          select: { bank_name: true, bank_account_number: true, name: true }
+        },
         sessions: {
           orderBy: { updated_at: 'desc' },
           take: 1
         },
         performances: {
           orderBy: { recorded_at: 'desc' },
-          take: 2 // Ambil 2 terakhir untuk pembandingan "Live Terkini" vs "Sesi Sebelumnya"
-        }
+          take: 5  // Ambil lebih banyak agar kalkulasi durasi akurat
+        },
+        custom_products: { select: { id: true } },
+        studio: { select: { products: { where: { account_id: null }, select: { id: true } } } }
       }
     });
 
     const mappedAccounts = accounts.map(acc => {
-      const session = acc.sessions[0];
+      const session  = acc.sessions[0];
       const livePerf = acc.performances[0] || {};
       const prevPerf = acc.performances[1] || {};
 
+      // ── Kalkulasi Rasio Omzet/Jam (Riil) ──────────────────────────────────
+      // Gunakan entri paling awal & paling akhir di rekam performance untuk
+      // mendapatkan durasi sesi yang sesungguhnya.
+      let rasioLive  = '-';
+      let durasiLive = '-';
+      let rasioSeb   = '-';
+      let durasiSeb  = '-';
+
+      if (acc.performances.length >= 1 && typeof livePerf.omzet_live !== 'undefined') {
+        const oldest  = acc.performances[acc.performances.length - 1];
+        const newest  = acc.performances[0];
+        const diffMs  = new Date(newest.recorded_at) - new Date(oldest.recorded_at);
+        const diffJam = diffMs / (1000 * 60 * 60);
+
+        if (diffJam > 0) {
+          const totalMenit = Math.round(diffMs / 60000);
+          const jam  = Math.floor(totalMenit / 60);
+          const mnt  = totalMenit % 60;
+          durasiLive = jam > 0 ? `${jam}j ${mnt}m` : `${mnt}m`;
+          rasioLive  = `Rp ${Math.floor(Number(livePerf.omzet_live) / diffJam).toLocaleString('id-ID')}/j`;
+        } else {
+          // Baru mulai (polling pertama) — tampilkan tanpa rasio
+          durasiLive = '< 5 menit';
+          rasioLive  = '-';
+        }
+      }
+
+      // ── Ambil data bank dari relasi Member ───────────────────────────────
+      // Sesuai keputusan user: data bank diambil dari Member terkait, bukan hardcode.
+      const bankName = acc.member?.bank_name || '-';
+
       return {
-        id: acc.id.substring(0, 8).toUpperCase(),
+        id:         acc.id.substring(0, 8).toUpperCase(),
         account_id: acc.id,
-        username: acc.shopee_username,
-        studio_id: acc.studio_id || id, // ID Studio asli untuk navigasi produk
+        username:   acc.shopee_username,
+        studio_id:  acc.studio_id || id,
         status: {
-           isLive: session ? session.status === 'LIVE' : false,
-           etalaseCount: Math.floor(Math.random() * 200) + 50, // Simulasi metrik yg blm ada di db
-           health: { 
-             sessions: acc.total_sessions,
-             pel: acc.health_status === 'CRITICAL' ? 1 : 0,
-             value: session ? session.health_score : 0,
-             warning: acc.health_status === 'WARNING' ? 'Sistem mendeteksi pelambatan trafik' : null
-           }
+          isLive:       session ? session.status === 'LIVE' : false,
+          etalaseCount: (acc.use_custom_vault && acc.custom_products?.length > 0)
+                          ? acc.custom_products.length
+                          : (acc.studio?.products?.length || 0),
+          health: {
+            sessions: acc.total_sessions,
+            pel:      acc.health_status === 'CRITICAL' ? 1 : 0,
+            value:    session ? session.health_score : 0,
+            warning:  acc.health_status === 'WARNING' ? 'Sistem mendeteksi pelambatan trafik' : null
+          }
         },
-        namaToko: acc.shopee_shop_name,
-        judulLive: livePerf.live_title || "Menunggu host memulai siaran...",
+        namaToko:   acc.shopee_shop_name,
+        judulLive:  livePerf.live_title || 'Menunggu host memulai siaran...',
         omzetLive: {
-           omzet: typeof livePerf.omzet_live !== 'undefined' ? `Rp ${Number(livePerf.omzet_live).toLocaleString('id-ID')}` : '-',
-           jam: "02:15",
-           rasio: typeof livePerf.omzet_live !== 'undefined' ? `Rp ${Math.floor(Number(livePerf.omzet_live) / 2.25).toLocaleString('id-ID')}/j` : '-'
+          omzet: typeof livePerf.omzet_live !== 'undefined'
+            ? `Rp ${Number(livePerf.omzet_live).toLocaleString('id-ID')}`
+            : '-',
+          jam:   durasiLive,
+          rasio: rasioLive
         },
         omzetSeb: {
-           omzet: typeof prevPerf.omzet_live !== 'undefined' ? `Rp ${Number(prevPerf.omzet_live).toLocaleString('id-ID')}` : '-',
-           jam: "04:00",
-           rasio: "-"
+          omzet: typeof prevPerf.omzet_live !== 'undefined'
+            ? `Rp ${Number(prevPerf.omzet_live).toLocaleString('id-ID')}`
+            : '-',
+          jam:   durasiSeb,
+          rasio: rasioSeb
         },
-        penonton: livePerf.viewers || 0,
-        pembeli: livePerf.buyers || 0,
-        komisi: typeof livePerf.omzet_komisi !== 'undefined' ? `Rp ${Number(livePerf.omzet_komisi).toLocaleString('id-ID')}` : '-',
-        bank: "Mandiri", // Anggap data statis UI kl ga ada relasinya
-        isVerif: acc.status === 'ACTIVE',
-        kategori: "KATEGORI REGULER"
+        penonton: livePerf.viewers  || 0,
+        pembeli:  livePerf.buyers   || 0,
+        komisi:   typeof livePerf.omzet_komisi !== 'undefined'
+          ? `Rp ${Number(livePerf.omzet_komisi).toLocaleString('id-ID')}`
+          : '-',
+        bank:     bankName,           // ← dari Member.bank_name (riil)
+        isVerif:  acc.status === 'ACTIVE',
+        kategori: 'KATEGORI REGULER'  // Tetap statis hingga kolom Studio.category tersedia
       };
     });
 
@@ -435,6 +480,7 @@ router.get('/:id/details', async (req, res) => {
     res.status(500).json({ error: 'Gagal mereload detail dari database.' });
   }
 });
+
 
 // ==========================================
 // RUTE MANAJEMEN PRODUK STUDIO (PHASE 10)

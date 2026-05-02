@@ -1,4 +1,62 @@
-import { chromium } from 'playwright';
+import { chromium, devices } from 'playwright';
+
+// ── Launch Args Hemat RAM ────────────────────────────────────────────────
+const RAM_SAVER_ARGS = [
+  '--no-sandbox',
+  '--disable-setuid-sandbox',
+  '--disable-blink-features=AutomationControlled',
+  '--disable-gpu',
+  '--disable-dev-shm-usage',
+  '--no-zygote',
+  '--disable-background-timer-throttling',
+  '--disable-renderer-backgrounding',
+  '--js-flags=--max-old-space-size=256',
+];
+
+// ── Profil Perangkat Acak ────────────────────────────────────────────────
+// Daftar nama perangkat seluler populer dari library Playwright
+const DEVICE_PROFILES = [
+  'Pixel 7',
+  'Pixel 5',
+  'Samsung Galaxy S21',
+  'Samsung Galaxy S9+',
+  'iPhone 13',
+  'iPhone 13 Pro Max',
+  'iPhone 12',
+];
+
+/**
+ * Mengambil profil perangkat secara acak.
+ * Hasilnya di-spread ke newContext() untuk mengganti UA & viewport statis.
+ */
+function getRandomDeviceProfile() {
+  const name = DEVICE_PROFILES[Math.floor(Math.random() * DEVICE_PROFILES.length)];
+  const profile = devices[name];
+  if (profile) {
+    console.log(`[Bot] 📱 Menggunakan profil perangkat: ${name}`);
+    return profile;
+  }
+  // Fallback manual jika nama tidak cocok
+  return {
+    userAgent: 'Mozilla/5.0 (Linux; Android 12; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.6367.82 Mobile Safari/537.36',
+    viewport:  { width: 390, height: 844 },
+  };
+}
+
+/**
+ * Memblokir resource berat (gambar, video, font, CSS) agar halaman
+ * dimuat lebih cepat dan konsumsi RAM jauh berkurang.
+ */
+async function blockHeavyResources(page) {
+  await page.route('**/*', (route) => {
+    const type = route.request().resourceType();
+    if (['image', 'media', 'font', 'stylesheet'].includes(type)) {
+      route.abort();
+    } else {
+      route.continue();
+    }
+  });
+}
 
 export class ShopeeBot {
   constructor() {
@@ -134,7 +192,7 @@ export class ShopeeBot {
         ]
       });
 
-      context = await this.browser.newContext({
+      context = await browser.newContext({
         userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
         extraHTTPHeaders: {
           'Accept-Language': 'id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7'
@@ -151,6 +209,7 @@ export class ShopeeBot {
       await context.addCookies(parsedCookies);
 
       const page = await context.newPage();
+      await blockHeavyResources(page);
       
       // === API INTERCEPTION (Menangkap Jalur Belakang) ===
       let interceptedProducts = [];
@@ -315,24 +374,47 @@ export class ShopeeBot {
 
   /**
    * Helper: Jeda acak antara min-max ms untuk meniru respons manusia.
+   * Menggunakan distribusi eksponensial agar lebih realistis
+   * (manusia sering jeda pendek, sesekali jeda panjang).
    */
   async humanDelay(minMs = 1500, maxMs = 4000) {
-    const delay = minMs + Math.floor(Math.random() * (maxMs - minMs));
+    // Distribusi agak condong ke waktu pendek (seperti jeda manusia asli)
+    const range  = maxMs - minMs;
+    const random = 1 - Math.sqrt(1 - Math.random()); // Distribusi eksponensial sederhana
+    const delay  = Math.round(minMs + random * range);
     await new Promise(r => setTimeout(r, delay));
   }
 
   /**
-   * Helper: Scroll halaman perlahan ke bawah lalu naik kembali (meniru manusia baca).
+   * Helper: Scroll halaman dengan gerakan natural menggunakan interpolasi Bezier.
+   * Menghasilkan gerakan yang tidak konsisten (tersendat, mempercepat, melambat)
+   * mirip cara manusia menggulir layar ponsel.
    */
   async humanScroll(page, steps = 5) {
     for (let i = 0; i < steps; i++) {
-      const scrollY = 300 + Math.floor(Math.random() * 400);
-      await page.mouse.wheel(0, scrollY);
-      await this.humanDelay(800, 2000);
+      // Setiap langkah scroll berbeda-beda (tidak konsisten seperti bot)
+      const baseScroll = 200 + Math.floor(Math.random() * 350);
+
+      // Simulasi "micro-hesitation" — kadang berhenti sejenak di tengah scroll
+      const hesitate = Math.random() < 0.3; // 30% kemungkinan berhenti sebentar
+
+      await page.mouse.wheel(0, baseScroll);
+
+      if (hesitate) {
+        // Berhenti membaca sebentar
+        await new Promise(r => setTimeout(r, 800 + Math.floor(Math.random() * 1200)));
+      } else {
+        await new Promise(r => setTimeout(r, 400 + Math.floor(Math.random() * 600)));
+      }
     }
-    // Scroll kembali ke atas
-    await page.mouse.wheel(0, -9999);
-    await this.humanDelay(1000, 2000);
+
+    // Scroll kembali ke atas dengan gerakan lebih cepat (seperti manusia yang "swipe up")
+    const upSteps = 3;
+    for (let i = 0; i < upSteps; i++) {
+      await page.mouse.wheel(0, -400 - Math.floor(Math.random() * 200));
+      await new Promise(r => setTimeout(r, 200 + Math.floor(Math.random() * 300)));
+    }
+    await this.humanDelay(800, 1500);
   }
 
   /**
@@ -366,13 +448,13 @@ export class ShopeeBot {
     try {
       browser = await chromium.launch({
         headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-blink-features=AutomationControlled']
+        args: RAM_SAVER_ARGS,
       });
 
+      const deviceProfile = getRandomDeviceProfile();
       context = await browser.newContext({
-        userAgent: 'Mozilla/5.0 (Linux; Android 12; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.6367.82 Mobile Safari/537.36',
+        ...deviceProfile,
         extraHTTPHeaders: { 'Accept-Language': 'id-ID,id;q=0.9' },
-        viewport: { width: 390, height: 844 } // Simulasi layar HP (iPhone 14)
       });
 
       // Sembunyikan tanda bot
@@ -380,11 +462,13 @@ export class ShopeeBot {
         Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
       });
 
-      // Inject cookies akun ini
-      const cookies = this.parseCookieString(session.cookie_data);
+      // Inject cookies akun (prioritaskan raw_cookie_encrypted, fallback ke cookie_data)
+      const cookieRaw = session.raw_cookie_encrypted || session.cookie_data;
+      const cookies   = this.parseCookieString(cookieRaw);
       await context.addCookies(cookies);
 
       const page = await context.newPage();
+      await blockHeavyResources(page);
 
       // =============================================
       // AKTIVITAS 1: Buka beranda Shopee & scroll
