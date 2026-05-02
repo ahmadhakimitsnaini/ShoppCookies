@@ -17,6 +17,33 @@ const shortDelay = (ms = 1500) =>
   new Promise(r => setTimeout(r, ms + Math.floor(Math.random() * 500)));
 
 // ============================================================
+// HELPER: RAM Saver & Shared Browser
+// ============================================================
+let sharedBrowser = null;
+const RAM_SAVER_ARGS = [
+  '--no-sandbox', '--disable-setuid-sandbox', '--disable-blink-features=AutomationControlled',
+  '--disable-gpu', '--disable-dev-shm-usage', '--no-zygote', '--js-flags=--max-old-space-size=256'
+];
+
+async function getSharedBrowser() {
+  if (!sharedBrowser || !sharedBrowser.isConnected()) {
+    sharedBrowser = await chromium.launch({ headless: true, args: RAM_SAVER_ARGS });
+    sharedBrowser.on('disconnected', () => { sharedBrowser = null; });
+  }
+  return sharedBrowser;
+}
+
+async function blockHeavyResources(page) {
+  await page.route('**/*', (route) => {
+    if (['image', 'media', 'font', 'stylesheet'].includes(route.request().resourceType())) {
+      route.abort();
+    } else {
+      route.continue();
+    }
+  });
+}
+
+// ============================================================
 // HELPER: Parse Cookie String ke Format Playwright
 // ============================================================
 const parseCookieString = (rawCookieStr) => {
@@ -131,6 +158,23 @@ const addSingleProductByUrl = async (page, productUrl, productName, index, total
       throw new Error(`Produk tidak ditemukan di hasil pencarian: ${productUrl}`);
     }
 
+    // 3.5. Cek Stok Habis
+    const isOutOfStock = await firstResult.evaluate(el => {
+      const text = el.innerText.toLowerCase();
+      return text.includes('stok habis') || text.includes('habis') || text.includes('sold out') || text.includes('stok 0');
+    });
+
+    if (isOutOfStock) {
+      console.log(`[Injector]    ⏭️ Dilewati (Stok Habis): ${productName || productUrl}`);
+      // Tutup modal pencarian agar bisa lanjut produk berikutnya
+      const closeModal = await page.$('[data-testid="modal-close"], button[aria-label="Close"], button.modal-close');
+      if (closeModal) {
+        await closeModal.click();
+        await shortDelay(500);
+      }
+      return 'SKIPPED';
+    }
+
     // 4. Klik tombol tambah/centang pada item hasil
     const addItemBtn = await firstResult.$(
       'button:has-text("Tambah"), button:has-text("Add"), button[class*="add"], ' +
@@ -175,22 +219,12 @@ const addSingleProductByUrl = async (page, productUrl, productName, index, total
 const injectSingleAccount = async (akun, session, products, clearEtalase = false) => {
   console.log(`\n[Injector] 🚀 Memulai Injeksi: @${akun.shopee_username} (${products.length} produk)`);
 
-  let browser = null;
   let context = null;
-  const results = { added: 0, failed: 0, errors: [] };
+  const results = { added: 0, skipped: 0, failed: 0, errors: [] };
 
   try {
-    // === STEP 1: Buka Browser Headless (Berjalan di Background) ===
-    browser = await chromium.launch({
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-blink-features=AutomationControlled',
-        '--disable-dev-shm-usage',
-        '--disable-gpu'
-      ]
-    });
+    // === STEP 1: Gunakan Shared Browser Headless ===
+    const browser = await getSharedBrowser();
 
     context = await browser.newContext({
       userAgent: session.user_agent ||
@@ -208,6 +242,9 @@ const injectSingleAccount = async (akun, session, products, clearEtalase = false
       window.chrome = { runtime: {} };
     });
 
+    const page = await context.newPage();
+    await blockHeavyResources(page);
+
     // === STEP 2: Inject Cookies ===
     const parsedCookies = parseCookieString(session.raw_cookie_encrypted);
     if (parsedCookies.length === 0) {
@@ -217,7 +254,6 @@ const injectSingleAccount = async (akun, session, products, clearEtalase = false
     console.log(`[Injector]    → ${parsedCookies.length} cookie berhasil diinjeksi.`);
 
     // === STEP 3: Navigasi ke Shopee Live Seller Center ===
-    const page = await context.newPage();
     console.log(`[Injector]    → Navigasi ke ${SHOPEE_LIVE_PRODUCT_URL}...`);
 
     await page.goto(SHOPEE_LIVE_PRODUCT_URL, {
@@ -252,8 +288,10 @@ const injectSingleAccount = async (akun, session, products, clearEtalase = false
       const prod = products[i];
       const success = await addSingleProductByUrl(page, prod.product_url, prod.product_name, i, products.length);
 
-      if (success) {
+      if (success === true) {
         results.added++;
+      } else if (success === 'SKIPPED') {
+        results.skipped++;
       } else {
         results.failed++;
         results.errors.push(`Produk ${i + 1}: ${prod.product_url}`);
@@ -267,7 +305,7 @@ const injectSingleAccount = async (akun, session, products, clearEtalase = false
       }
     }
 
-    console.log(`[Injector] 🏁 Selesai @${akun.shopee_username}: ✅ ${results.added} berhasil, ❌ ${results.failed} gagal`);
+    console.log(`[Injector] 🏁 Selesai @${akun.shopee_username}: ✅ ${results.added} masuk, ⏭️ ${results.skipped} dilewati, ❌ ${results.failed} gagal`);
     return { username: akun.shopee_username, success: true, ...results };
 
   } catch (err) {
@@ -286,12 +324,12 @@ const injectSingleAccount = async (akun, session, products, clearEtalase = false
       username: akun.shopee_username,
       success: false,
       added: results.added,
-      failed: products.length - results.added,
+      skipped: results.skipped,
+      failed: products.length - results.added - results.skipped,
       error: err.message
     };
   } finally {
     if (context) await context.close().catch(() => {});
-    if (browser) await browser.close().catch(() => {});
   }
 };
 
