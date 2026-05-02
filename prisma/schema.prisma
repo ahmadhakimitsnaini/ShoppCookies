@@ -70,6 +70,14 @@ enum BotTaskStatus {
   @@map("bot_task_status")
 }
 
+enum DeviceStatus {
+  ACTIVE
+  MAINTENANCE
+  BROKEN
+
+  @@map("device_status")
+}
+
 // ============================================================
 // MODELS
 // ============================================================
@@ -120,6 +128,7 @@ model Studio {
   telegram_chat_id String?         @db.VarChar(100)
   shopee_accounts  ShopeeAccount[]
   products         StudioProduct[]
+  devices          Device[]
 
   @@map("studios")
 }
@@ -152,8 +161,11 @@ model ShopeeAccount {
   updated_at       DateTime        @updatedAt @db.Timestamptz
   deleted_at       DateTime?       @db.Timestamptz
 
+  device_id        String?         @db.Uuid
+
   member           Member          @relation(fields: [member_id], references: [id], onDelete: Restrict)
   studio           Studio?         @relation(fields: [studio_id], references: [id], onDelete: SetNull)
+  device           Device?         @relation(fields: [device_id], references: [id], onDelete: SetNull)
   sessions         ShopeeSession[]
   performances     LivePerformance[]
   violations       AccountViolation[]
@@ -224,4 +236,23 @@ model BotTask {
   account     ShopeeAccount @relation(fields: [account_id], references: [id], onDelete: Cascade)
 
   @@map("bot_tasks")
+}
+
+// ============================================================
+// DEVICE (Inventaris Perangkat Fisik HP)
+// ============================================================
+model Device {
+  id           String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  studio_id    String         @db.Uuid
+  name         String         @db.VarChar(100)
+  mac_address  String?        @unique @db.VarChar(50)
+  status       DeviceStatus   @default(ACTIVE)
+  notes        String?        @db.Text
+  created_at   DateTime       @default(now()) @db.Timestamptz
+  updated_at   DateTime       @updatedAt @db.Timestamptz
+
+  studio       Studio         @relation(fields: [studio_id], references: [id], onDelete: Cascade)
+  accounts     ShopeeAccount[] // 1 Device hanya boleh menampung 1 akun aktif (dikontrol via unique constraint logis di aplikasi)
+
+  @@map("devices")
 }
