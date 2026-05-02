@@ -6,11 +6,13 @@ import {
   User, LogOut, ChevronDown, Bell, Search, TrendingUp
 } from 'lucide-react';
 import { Badge } from '../ui/Badge';
+import { CommandPalette } from '../ui/CommandPalette';
 import { useUIStore } from '../../store/useUIStore';
 
 export const MainLayout = () => {
   const { isSidebarOpen, setSidebarOpen, isNotifOpen, setNotifOpen, isNavigating, setNavigating, toggleSidebar, updateViewport } = useUIStore();
   const location = useLocation();
+  const [isSearchOpen, setSearchOpen] = useState(false);
 
   // Handle route change for progress bar
   useEffect(() => {
@@ -33,7 +35,7 @@ export const MainLayout = () => {
     const handleKeyDown = (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
         e.preventDefault();
-        alert('Global Search mock triggered. (Ctrl+K)');
+        setSearchOpen(true);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -158,12 +160,15 @@ export const MainLayout = () => {
               <Menu size={20} />
             </button>
             
-            {/* Global Search Mock */}
-            <div className="hidden lg:flex items-center bg-gray-100 px-3 py-1.5 rounded-md ml-4 group">
-               <Search size={16} className="text-gray-400 group-hover:text-gray-500" />
-               <span className="ml-2 text-sm text-gray-400 mr-8">Cari apapun...</span>
-               <kbd className="text-[10px] font-mono bg-white text-gray-500 px-1.5 rounded border border-gray-200 shadow-sm">Ctrl+K</kbd>
-            </div>
+          {/* Global Search — membuka CommandPalette */}
+          <div
+            className="hidden lg:flex items-center bg-gray-100 px-3 py-1.5 rounded-md ml-4 group cursor-pointer hover:bg-gray-200 transition-colors"
+            onClick={() => setSearchOpen(true)}
+          >
+            <Search size={16} className="text-gray-400 group-hover:text-gray-500" />
+            <span className="ml-2 text-sm text-gray-400 mr-8">Cari apapun...</span>
+            <kbd className="text-[10px] font-mono bg-white text-gray-500 px-1.5 rounded border border-gray-200 shadow-sm">Ctrl+K</kbd>
+          </div>
           </div>
           
           <div className="flex items-center space-x-3">
@@ -234,6 +239,9 @@ export const MainLayout = () => {
           100% { transform: translateX(300%); }
         }
       `}</style>
+
+      {/* Global Search Command Palette */}
+      <CommandPalette isOpen={isSearchOpen} onClose={() => setSearchOpen(false)} />
     </div>
   );
 };
