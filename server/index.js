@@ -9,9 +9,11 @@ import analyticsRoutes from './routes/analytics.routes.js';
 import systemRoutes from './routes/system.routes.js';
 import memberRoutes from './routes/member.routes.js';
 import accountsRoutes from './routes/accounts.routes.js';
+import searchRoutes from './routes/search.routes.js';
+import devicesRoutes from './routes/devices.routes.js';
 import { startCronJobs } from './services/cron/jobScheduler.js';
 import { startTelegramBot } from './services/telegram/TelegramBot.js';
-import { startLiveChatObserver } from './services/bot/LiveController.js';
+import { startDynamicLiveObserver } from './services/bot/LiveController.js';
 
 dotenv.config();
 
@@ -36,6 +38,8 @@ app.use('/api/analytics', analyticsRoutes);
 app.use('/api/system', systemRoutes);
 app.use('/api/members', memberRoutes);
 app.use('/api/accounts', accountsRoutes);
+app.use('/api/search', searchRoutes);
+app.use('/api/devices', devicesRoutes);
 
 // Global Error Handler
 app.use((err, req, res, next) => {
@@ -46,12 +50,12 @@ app.use((err, req, res, next) => {
 app.listen(PORT, () => {
   console.log(`🚀 [Server] Backend Express berjalan di http://localhost:${PORT}`);
   
-  // Menyalakan robot chron jobs
+  // Menyalakan robot cron jobs
   startCronJobs();
 
   // Menyalakan radar sinyal Bot Telegram
   startTelegramBot();
 
-  // Mengaktfikan Telinga Shopee Eye Observer untuk 1 Sesi Simulasi
-  startLiveChatObserver('A201_KOSMETIK');
+  // Menyalakan Live Observer Dinamis — hanya aktif jika ada sesi LIVE di database
+  startDynamicLiveObserver();
 });
