@@ -311,6 +311,23 @@ export const startCronJobs = () => {
     }
   });
 
+  // ============================================================
+  // CRON 5: PEMBERSIHAN OTOMATIS (Setiap jam 03:00 pagi)
+  // Menghapus log BotTask yang usianya lebih dari 30 hari
+  // ============================================================
+  cron.schedule('0 3 * * *', async () => {
+    console.log('[Cron] 🧹 Menjalankan Pembersihan Log Otomatis (30 Hari)...');
+    try {
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      const result = await prisma.botTask.deleteMany({
+        where: { created_at: { lt: thirtyDaysAgo } }
+      });
+      console.log(`[Cron] 🧹 Berhasil menghapus ${result.count} riwayat tugas usang.`);
+    } catch (err) {
+      console.error('[Cron] ❌ Gagal melakukan pembersihan log:', err.message);
+    }
+  }, { timezone: "Asia/Jakarta" });
+
   console.log('✅ [Scheduler] Semua sistem otomasi cron telah mengudara.');
 };
 

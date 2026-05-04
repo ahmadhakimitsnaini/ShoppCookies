@@ -19,6 +19,7 @@ import { ExpiredCookies } from './pages/ExpiredCookies'
 import { ListAkunTreatment } from './pages/ListAkunTreatment'
 import { TreatmentAuto } from './pages/TreatmentAuto'
 import { TreatmentManual } from './pages/TreatmentManual'
+import { LaporanTreatment } from './pages/LaporanTreatment'
 import { SetStudio } from './pages/SetStudio'
 import { InputDataBank } from './pages/InputDataBank'
 import { CekOmzet } from './pages/CekOmzet'
@@ -75,7 +76,7 @@ const AppRouter = () => {
           <Route path="/set-studio" element={<SetStudio />} />
           <Route path="/cek-omzet" element={<CekOmzet />} />
           <Route path="/omzet-analitik" element={<OmzetAnalitik />} />
-          <Route path="/laporan-treatment" element={<PlaceholderPage title="Laporan Treatment" />} />
+          <Route path="/laporan-treatment" element={<LaporanTreatment />} />
           <Route path="/input-bank-produk" element={<InputDataBank />} />
           
           {/* Fallback */}

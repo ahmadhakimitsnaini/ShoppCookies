@@ -165,4 +165,162 @@ router.get('/logs/:accountId', async (req, res) => {
   }
 });
 
+// ============================================================
+// GET /api/treatment/active-live
+// Daftar semua akun dengan sesi LIVE aktif, beserta komparasi
+// omzet Live Terkini vs Sesi Sebelumnya.
+// Digunakan oleh halaman TreatmentManual.jsx
+// ============================================================
+router.get('/active-live', async (req, res) => {
+  try {
+    const accounts = await prisma.shopeeAccount.findMany({
+      where: {
+        deleted_at: null,
+        sessions: { some: { status: 'LIVE' } },
+      },
+      include: {
+        member: { select: { bank_name: true } },
+        sessions: {
+          orderBy: { created_at: 'desc' },
+          take: 1,
+        },
+        performances: {
+          orderBy: { recorded_at: 'desc' },
+          take: 2, // [0] live terkini, [1] sesi sebelumnya
+        },
+      },
+      orderBy: { updated_at: 'desc' },
+    });
+
+    const mapped = accounts.map((acc) => {
+      const session  = acc.sessions[0]    ?? null;
+      const livePerf = acc.performances[0] ?? null;
+      const prevPerf = acc.performances[1] ?? null;
+
+      return {
+        id:          acc.id,
+        shortId:     acc.id.substring(0, 8).toUpperCase(),
+        session_id:  session?.id ?? null,
+        status:      session ? String(session.status) : 'OFFLINE',
+        stateColor:  session?.status === 'LIVE' ? 'green' : 'gray',
+        namaToko:    acc.shopee_shop_name,
+        username:    acc.shopee_username,
+        judulLive:   livePerf?.live_title ?? '-',
+        // Live terkini
+        omzet:       Number(livePerf?.omzet_live   ?? 0) > 0
+          ? `Rp ${Number(livePerf.omzet_live).toLocaleString('id-ID')}`
+          : '-',
+        omzetJam:    '-', // kolom durasi belum ada di schema
+        // Sesi sebelumnya
+        omzetSeb:    Number(prevPerf?.omzet_live ?? 0) > 0
+          ? `Rp ${Number(prevPerf.omzet_live).toLocaleString('id-ID')}`
+          : '-',
+        omzetJamSeb: '-',
+        viewers:     livePerf?.viewers ?? 0,
+        buyers:      livePerf?.buyers  ?? 0,
+        komisi:      Number(livePerf?.omzet_komisi ?? 0) > 0
+          ? `Rp ${Number(livePerf.omzet_komisi).toLocaleString('id-ID')}`
+          : '-',
+        bank:        acc.member?.bank_name ?? '-',
+      };
+    });
+
+    res.json(mapped);
+  } catch (error) {
+    console.error('[Treatment] /active-live error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================================
+// POST /api/treatment/stop/:sessionId
+// Menghentikan sesi Live secara manual (membuat BotTask STOP_LIVE)
+// ============================================================
+router.post('/stop/:sessionId', async (req, res) => {
+  const { sessionId } = req.params;
+  try {
+    const session = await prisma.shopeeSession.findUnique({
+      where: { id: sessionId },
+      include: { account: true },
+    });
+    if (!session) return res.status(404).json({ error: 'Sesi tidak ditemukan.' });
+    if (String(session.status) !== 'LIVE') {
+      return res.status(400).json({ error: 'Sesi ini tidak dalam status LIVE.' });
+    }
+
+    // Buat task STOP_LIVE
+    const task = await prisma.botTask.create({
+      data: {
+        account_id: session.account_id,
+        task_type:  'STOP_LIVE',
+        status:     'PENDING',
+        payload:    { session_id: sessionId, triggered_by: 'manual_ui' },
+      },
+    });
+
+    // Ubah status sesi langsung ke OFFLINE sebagai efek segera
+    await prisma.shopeeSession.update({
+      where: { id: sessionId },
+      data:  { status: 'OFFLINE', last_sync_at: new Date() },
+    });
+
+    res.json({
+      success:  true,
+      task_id:  task.id,
+      message:  `Sesi @${session.account?.shopee_username} telah dihentikan. Task bot STOP_LIVE dibuat.`,
+    });
+  } catch (error) {
+    console.error('[Treatment] /stop error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================================
+// GET /api/treatment/logs
+// Mengambil riwayat aktivitas bot (BotTask) dengan pagination
+// ============================================================
+router.get('/logs', async (req, res) => {
+  try {
+    const { page = 1, limit = 50, status, task_type } = req.query;
+    const skip = (Number(page) - 1) * Number(limit);
+    const take = Number(limit);
+
+    const where = {};
+    if (status) where.status = status;
+    if (task_type) where.task_type = task_type;
+
+    const [total, tasks] = await Promise.all([
+      prisma.botTask.count({ where }),
+      prisma.botTask.findMany({
+        where,
+        skip,
+        take,
+        orderBy: { created_at: 'desc' },
+        include: {
+          account: {
+            select: {
+              shopee_username: true,
+              shopee_shop_name: true,
+              studio: { select: { name: true } }
+            }
+          }
+        }
+      })
+    ]);
+
+    res.json({
+      data: tasks,
+      meta: {
+        total,
+        page: Number(page),
+        limit: take,
+        total_pages: Math.ceil(total / take)
+      }
+    });
+  } catch (error) {
+    console.error('[Treatment] /logs error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;
