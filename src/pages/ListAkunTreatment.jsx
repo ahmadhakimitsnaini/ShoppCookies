@@ -2,19 +2,16 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
+import { ToastContainer } from '../components/ui/Toast';
 import { Settings, AlertCircle, ShieldCheck, PlayCircle, Clock, Loader2 } from 'lucide-react';
 import { fetchApi } from '../lib/api';
+import { useToast } from '../lib/useToast';
 
 export const ListAkunTreatment = () => {
   const [akunList, setAkunList]     = useState([]);
   const [isLoading, setIsLoading]   = useState(true);
   const [runningIds, setRunningIds] = useState(new Set()); // akun yang sedang di-treatment
-  const [toast, setToast]           = useState(null);
-
-  const showToast = (msg, type = 'success') => {
-    setToast({ msg, type });
-    setTimeout(() => setToast(null), 4000);
-  };
+  const { toasts, addToast, removeToast } = useToast();
 
   const fetchAccounts = useCallback(async () => {
     try {
@@ -36,16 +33,16 @@ export const ListAkunTreatment = () => {
 
   const handleStartTreatment = async (row) => {
     if (row.is_live) {
-      showToast('Akun sedang LIVE, tidak bisa dijalankan treatment.', 'error');
+      addToast('Akun sedang LIVE, tidak bisa dijalankan treatment.', 'error');
       return;
     }
 
     setRunningIds(prev => new Set([...prev, row.full_id]));
     try {
       const res = await fetchApi(`/api/treatment/start/${row.full_id}`, { method: 'POST' });
-      showToast(res.message, 'success');
+      addToast(res.message, 'success');
     } catch (err) {
-      showToast(err.message, 'error');
+      addToast(err.message, 'error');
     } finally {
       // Jangan langsung hapus — biarkan tetap "berjalan" sampai user refresh manual
       // Bot memakan waktu 10-15 menit, tidak bisa track real-time di sini
@@ -91,14 +88,8 @@ export const ListAkunTreatment = () => {
   return (
     <div className="space-y-6 animate-in fade-in duration-500 max-w-6xl mx-auto mt-4">
 
-      {/* Toast Notification */}
-      {toast && (
-        <div className={`fixed bottom-6 right-6 z-50 px-4 py-3 rounded-xl shadow-xl text-sm font-medium ${
-          toast.type === 'success' ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'
-        } animate-in slide-in-from-bottom-4`}>
-          {toast.msg}
-        </div>
-      )}
+      {/* Toast Notification via ToastContainer */}
+      <ToastContainer toasts={toasts} removeToast={removeToast} />
 
       <div className="flex justify-between items-end mb-2">
         <div>

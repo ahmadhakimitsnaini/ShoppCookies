@@ -4,18 +4,85 @@ import { fetchApi } from '../lib/api';
 import { Card, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Skeleton } from '../components/ui/Skeleton';
-import { ArrowLeft, ExternalLink, Download, StopCircle, RefreshCw, XCircle, Tag, ShieldAlert } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Download, StopCircle, RefreshCw, XCircle, Tag, ShieldAlert, Archive, Plus, Trash2, ToggleLeft, ToggleRight, Loader, Play, Square } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { ToastContainer } from '../components/ui/Toast';
+import { useToast } from '../lib/useToast';
 
 export const DetailStudio = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { toasts, addToast, removeToast } = useToast();
   const [isLoading, setIsLoading] = useState(true);
   const [isInjecting, setIsInjecting] = useState(false);
   const [period, setPeriod] = useState(30);
   const [chartData, setChartData] = useState([]);
   const [metrics, setMetrics] = useState(null);
   const [isMetricsLoading, setIsMetricsLoading] = useState(true);
+
+  // State untuk Modal Brankas Mandiri
+  const [vaultModal, setVaultModal] = useState(null); // { accountId, username } atau null
+  const [vaultData, setVaultData] = useState({ use_custom_vault: false, products: [] });
+  const [vaultLoading, setVaultLoading] = useState(false);
+  const [vaultNewUrl, setVaultNewUrl] = useState('');
+  const [vaultNewName, setVaultNewName] = useState('');
+  const [vaultSaving, setVaultSaving] = useState(false);
+
+  // State untuk Toggle Live (Manual Override)
+  const [toggleLiveLoading, setToggleLiveLoading] = useState({});
+
+  const openVaultModal = async (accountId, username) => {
+    setVaultModal({ accountId, username });
+    setVaultLoading(true);
+    try {
+      const data = await fetchApi(`/api/accounts/${accountId}/products`);
+      setVaultData(data);
+    } catch (e) {
+      console.error('Gagal muat brankas mandiri:', e);
+    } finally {
+      setVaultLoading(false);
+    }
+  };
+
+  const toggleVault = async () => {
+    try {
+      const res = await fetchApi(`/api/accounts/${vaultModal.accountId}/toggle-vault`, { method: 'PATCH' });
+      setVaultData(prev => ({ ...prev, use_custom_vault: res.use_custom_vault }));
+      addToast(res.message);
+    } catch (e) {
+      addToast('Gagal mengubah sakelar: ' + e.message, 'error');
+    }
+  };
+
+  const addVaultProduct = async () => {
+    if (!vaultNewUrl.trim()) return addToast('URL produk wajib diisi.', 'error');
+    setVaultSaving(true);
+    try {
+      const res = await fetchApi(`/api/accounts/${vaultModal.accountId}/products`, {
+        method: 'POST',
+        body: JSON.stringify({ product_url: vaultNewUrl, product_name: vaultNewName })
+      });
+      setVaultData(prev => ({ ...prev, products: [...prev.products, res.product] }));
+      setVaultNewUrl('');
+      setVaultNewName('');
+      addToast('Produk ditambahkan!');
+    } catch (e) {
+      addToast('Gagal menambah produk: ' + e.message, 'error');
+    } finally {
+      setVaultSaving(false);
+    }
+  };
+
+  const deleteVaultProduct = async (productId) => {
+    if (!window.confirm('Hapus produk ini dari Brankas Mandiri?')) return;
+    try {
+      await fetchApi(`/api/accounts/${vaultModal.accountId}/products/${productId}`, { method: 'DELETE' });
+      setVaultData(prev => ({ ...prev, products: prev.products.filter(p => p.id !== productId) }));
+      addToast('Produk dihapus.');
+    } catch (e) {
+      addToast('Gagal hapus produk: ' + e.message, 'error');
+    }
+  };
 
   // Helper: Format angka ke Rupiah singkat (Rp 84.5M / Rp 500K)
   const formatRupiah = (num) => {
@@ -115,17 +182,32 @@ export const DetailStudio = () => {
 
   const [tableData, setTableData] = useState([]);
 
+  const loadTableData = async () => {
+    try {
+      const response = await fetchApi(`/api/studios/${id}/details`);
+      setTableData(response);
+    } catch (err) {
+      console.error('Gagal menarik detail studio:', err);
+    }
+  };
+
   useEffect(() => {
-    const loadRealData = async () => {
-      try {
-        const response = await fetchApi(`/api/studios/${id}/details`);
-        setTableData(response);
-      } catch (err) {
-        console.error('Gagal menarik detail studio:', err);
-      }
-    };
-    loadRealData();
+    loadTableData();
   }, [id]);
+
+  const toggleLiveStatus = async (accountId) => {
+    setToggleLiveLoading(prev => ({ ...prev, [accountId]: true }));
+    try {
+      const res = await fetchApi(`/api/accounts/${accountId}/toggle-live`, { method: 'PATCH' });
+      addToast(res.message);
+      // Reload tabel agar status badge langsung update
+      await loadTableData();
+    } catch (e) {
+      addToast('Gagal mengubah status Live: ' + e.message, 'error');
+    } finally {
+      setToggleLiveLoading(prev => ({ ...prev, [accountId]: false }));
+    }
+  };
 
   const handleInjectProducts = async () => {
     if (!window.confirm('Yakin ingin mulai menginjeksi produk ke seluruh keranjang akun yang sedang LIVE di studio ini? (Bot akan mengosongkan keranjang lama terlebih dahulu)')) {
@@ -138,9 +220,9 @@ export const DetailStudio = () => {
         method: 'POST',
         body: JSON.stringify({ clearEtalase: true })
       });
-      alert(res.message || 'Proses injeksi dimulai di latar belakang.');
+      addToast(res.message || 'Proses injeksi dimulai di latar belakang.');
     } catch (err) {
-      alert(err.message || 'Gagal memulai injeksi produk.');
+      addToast(err.message || 'Gagal memulai injeksi produk.', 'error');
     } finally {
       setIsInjecting(false);
     }
@@ -148,6 +230,7 @@ export const DetailStudio = () => {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
+      <ToastContainer toasts={toasts} removeToast={removeToast} />
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-2">
         <div className="flex items-center">
           <Button 
@@ -382,11 +465,38 @@ export const DetailStudio = () => {
                   <td className="px-3 py-4 border-r border-indigo-50/50 align-top">
                     <div className="flex flex-col space-y-3">
                       <div className="flex items-center justify-between">
-                         {item.status.isLive && (
-                           <span className="px-2 py-0.5 bg-red-500 text-white text-[10px] font-bold rounded animate-pulse shadow-sm">
-                             LIVE
-                           </span>
-                         )}
+                         {/* Badge Status LIVE / SIAGA + Tombol Toggle */}
+                         <div className="flex flex-col gap-1.5">
+                           {item.status.isLive ? (
+                             <span className="px-2 py-0.5 bg-red-500 text-white text-[10px] font-bold rounded animate-pulse shadow-sm inline-flex items-center gap-1">
+                               <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
+                               LIVE
+                             </span>
+                           ) : (
+                             <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-[10px] font-bold rounded inline-flex items-center gap-1 border border-amber-200">
+                               <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                               SIAGA
+                             </span>
+                           )}
+                           {/* Tombol Toggle Live Manual */}
+                           <button
+                             onClick={() => toggleLiveStatus(item.account_id)}
+                             disabled={toggleLiveLoading[item.account_id]}
+                             className={`flex items-center gap-1 text-[9px] font-bold px-2 py-1 rounded border transition-all disabled:opacity-50 ${
+                               item.status.isLive
+                                 ? 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100'
+                                 : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                             }`}
+                           >
+                             {toggleLiveLoading[item.account_id] ? (
+                               <Loader size={9} className="animate-spin" />
+                             ) : item.status.isLive ? (
+                               <><Square size={9} /> Stop Bot</>
+                             ) : (
+                               <><Play size={9} /> Paksa Live</>
+                             )}
+                           </button>
+                         </div>
                          <div className="flex flex-col items-end">
                            <span className="text-[11px] font-bold text-indigo-900 bg-indigo-100/80 px-2 py-0.5 rounded">
                              Σ {item.status.etalaseCount} Etalase
@@ -487,19 +597,28 @@ export const DetailStudio = () => {
                         STOP LIVE INI
                       </Button>
                       
-                      <div className="grid grid-cols-2 gap-1 mt-1">
-                        <Button 
-                          variant="secondary" 
-                          size="sm" 
-                          className="text-[9px] bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100 h-6 px-1 shadow-none"
-                          onClick={() => navigate(`/list-studio/${item.studio_id}/produk`)}
-                        >
-                          <Tag size={10} className="mr-1"/> Produk
-                        </Button>
-                        <Button variant="secondary" size="sm" className="text-[9px] bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 h-6 px-1 shadow-none">
-                          <RefreshCw size={10} className="mr-1"/> Input Treat
-                        </Button>
-                      </div>
+                        <div className="grid grid-cols-3 gap-1 mt-1">
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            className="text-[9px] bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100 h-6 px-1 shadow-none"
+                            onClick={() => navigate(`/list-studio/${item.studio_id}/produk`)}
+                          >
+                            <Tag size={10} className="mr-1"/> Studio
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            className="text-[9px] bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100 h-6 px-1 shadow-none"
+                            onClick={() => openVaultModal(item.account_id, item.username)}
+                            title="Brankas Mandiri Akun Ini"
+                          >
+                            <Archive size={10} className="mr-1"/> Mandiri
+                          </Button>
+                          <Button variant="secondary" size="sm" className="text-[9px] bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 h-6 px-1 shadow-none">
+                            <RefreshCw size={10} className="mr-1"/> Treat
+                          </Button>
+                        </div>
                       <Button variant="danger" size="sm" className="w-full text-[9px] bg-red-50 text-red-700 border-red-200 hover:bg-red-100 h-6 mt-0.5 shadow-none">
                          <XCircle size={10} className="mr-1" /> Terminate Instance HP
                       </Button>
@@ -523,6 +642,102 @@ export const DetailStudio = () => {
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
       `}</style>
+
+      {/* ===== MODAL BRANKAS MANDIRI ===== */}
+      {vaultModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh]">
+            {/* Header Modal */}
+            <div className="flex items-center justify-between p-5 border-b border-gray-100">
+              <div>
+                <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                  <Archive size={18} className="text-indigo-600" />
+                  Brankas Mandiri
+                </h2>
+                <p className="text-xs text-gray-500 mt-0.5">@{vaultModal.username}</p>
+              </div>
+              <button onClick={() => setVaultModal(null)} className="text-gray-400 hover:text-gray-600 text-xl font-bold leading-none">✕</button>
+            </div>
+
+            {/* Sakelar Toggle */}
+            <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
+              <div>
+                <p className="text-sm font-semibold text-gray-700">Aktifkan Brankas Mandiri</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {vaultData.use_custom_vault
+                    ? '✅ Bot menggunakan produk dari brankas ini'
+                    : '↩️ Bot menggunakan Brankas Master Studio'}
+                </p>
+              </div>
+              <button onClick={toggleVault} className="ml-4 flex-shrink-0">
+                {vaultData.use_custom_vault
+                  ? <ToggleRight size={36} className="text-indigo-600" />
+                  : <ToggleLeft size={36} className="text-gray-400" />}
+              </button>
+            </div>
+
+            {/* Konten Produk */}
+            <div className="flex-1 overflow-y-auto p-5">
+              {vaultLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader size={24} className="animate-spin text-indigo-500" />
+                  <span className="ml-2 text-gray-500 text-sm">Memuat brankas...</span>
+                </div>
+              ) : vaultData.products.length === 0 ? (
+                <div className="text-center py-10 text-gray-400">
+                  <Archive size={32} className="mx-auto mb-2 opacity-40" />
+                  <p className="text-sm">Belum ada produk di Brankas Mandiri ini.</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {vaultData.products.map((p, i) => (
+                    <div key={p.id} className="flex items-center gap-3 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2.5">
+                      <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center justify-center flex-shrink-0">{i + 1}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-gray-800 truncate">{p.product_name || 'Tanpa Nama'}</p>
+                        <p className="text-[10px] text-gray-400 truncate">{p.product_url}</p>
+                      </div>
+                      <button onClick={() => deleteVaultProduct(p.id)} className="text-red-400 hover:text-red-600 flex-shrink-0">
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Form Tambah Produk Baru */}
+            <div className="p-4 border-t border-gray-100 bg-gray-50/50 space-y-2">
+              <p className="text-xs font-semibold text-gray-600">Tambah Produk Baru</p>
+              <input
+                type="text"
+                placeholder="Nama produk (opsional)"
+                value={vaultNewName}
+                onChange={e => setVaultNewName(e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+              />
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="https://shopee.co.id/...  (wajib)"
+                  value={vaultNewUrl}
+                  onChange={e => setVaultNewUrl(e.target.value)}
+                  className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                />
+                <button
+                  onClick={addVaultProduct}
+                  disabled={vaultSaving || !vaultNewUrl.trim()}
+                  className="bg-indigo-600 text-white px-3 py-2 rounded-lg hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-1 text-xs font-medium"
+                >
+                  {vaultSaving ? <Loader size={12} className="animate-spin" /> : <Plus size={12} />}
+                  Tambah
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+

@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { StatCard, StudioCard, Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card';
 import { Table } from '../components/ui/Table';
 import { Button } from '../components/ui/Button';
@@ -6,17 +6,23 @@ import { Input } from '../components/ui/Input';
 import { Badge } from '../components/ui/Badge';
 import { DollarSign, Users, Activity, Target, Plus, Search, AlertCircle, RefreshCw } from 'lucide-react';
 import { useStudioStore } from '../store/useStudioStore';
+import { getAnalyticsSummary, getStudiosAnalytics, formatRupiah } from '../lib/api';
 
 export const Dashboard = () => {
   const { studios, isLoading, fetchStudios } = useStudioStore();
+  const [summary, setSummary]       = useState(null);
+  const [studioStats, setStudioStats] = useState([]);
 
   useEffect(() => {
     fetchStudios();
+    getAnalyticsSummary().then(setSummary).catch(() => {});
+    getStudiosAnalytics().then(setStudioStats).catch(() => {});
   }, []);
 
-  const totalOmzetUser = "Rp 0"; // TODO: Aggregation of actual revenue if available in Studio model
-  const activeStudiosCount = studios.filter(s => s.status === 'ACTIVE').length;
-  const liveSessionsCount = studios.reduce((acc, curr) => acc + (curr.totalLiveSessions || 0), 0);
+  const activeStudiosCount = studios.filter((s) => s.status === 'ACTIVE').length;
+  const liveSessionsCount  = studios.reduce((acc, curr) => acc + (curr.totalLiveSessions || 0), 0);
+  const totalOmzet         = summary ? formatRupiah(summary.omzet_hari_ini) : '...';
+  const totalKomisi        = summary ? formatRupiah(summary.komisi_hari_ini) : '...';
   return (
     <div className="space-y-6">
       {/* Header section */}
@@ -42,33 +48,33 @@ export const Dashboard = () => {
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard 
-          title="Total Omzet" 
-          value="Rp 124.5M" 
-          icon={<DollarSign size={24} />} 
-          trend="up" 
-          trendValue="+12.5%" 
+        <StatCard
+          title="Total Omzet Hari Ini"
+          value={totalOmzet}
+          icon={<DollarSign size={24} />}
+          trend="up"
+          trendValue="Real-Time"
         />
-        <StatCard 
-          title="Studio Aktif / Live" 
-          value={`${activeStudiosCount} / ${liveSessionsCount}`} 
-          icon={<Target size={24} />} 
-          trend="neutral" 
-          trendValue="Data Real-Time" 
+        <StatCard
+          title="Studio Aktif / Live"
+          value={`${activeStudiosCount} / ${liveSessionsCount}`}
+          icon={<Target size={24} />}
+          trend="neutral"
+          trendValue="Data Real-Time"
         />
-        <StatCard 
-          title="Total Klik" 
-          value="1.2M" 
-          icon={<Activity size={24} />} 
-          trend="down" 
-          trendValue="-2.1%" 
+        <StatCard
+          title="Komisi Hari Ini"
+          value={totalKomisi}
+          icon={<Activity size={24} />}
+          trend="up"
+          trendValue="Dari Live Performance"
         />
-        <StatCard 
-          title="Konversi" 
-          value="8.4%" 
-          icon={<Users size={24} />} 
-          trend="up" 
-          trendValue="+0.4%" 
+        <StatCard
+          title="Studio Sedang Live"
+          value={summary?.studio_live_count ?? '...'}
+          icon={<Users size={24} />}
+          trend={summary?.studio_live_count > 0 ? 'up' : 'neutral'}
+          trendValue={`dari ${summary?.studio_total_count ?? '-'} studio`}
         />
       </div>
 
@@ -87,22 +93,25 @@ export const Dashboard = () => {
               </div>
             </CardHeader>
             <CardContent className="p-0">
-              <Table 
+              <Table
                 columns={[
                   { header: 'Nama Studio', accessor: 'name' },
                   { header: 'Status', cell: (row) => <Badge status={row.status} /> },
-                  { header: 'Omzet', accessor: 'revenue' },
-                  { header: 'Klik', accessor: 'clicks' },
+                  { header: 'Omzet Hari Ini', accessor: 'revenue' },
+                  { header: 'Komisi', accessor: 'komisi' },
                   { header: 'Cookies', cell: (row) => <Badge status={row.cookiesStatus === 'Aman' ? 'AMAN' : 'EXPIRED'} /> },
                   { header: 'Aksi', cell: () => <Button variant="ghost" size="sm">Detail</Button> }
                 ]}
-                data={studios.map(studio => ({
-                   name: studio.name,
-                   status: studio.status,
-                   revenue: 'Rp 0', // Placeholder until revenue tracking is added
-                   clicks: '-',
-                   cookiesStatus: studio.activeAccountsCount > 0 ? 'Aman' : 'Expired'
-                }))}
+                data={studios.map((studio) => {
+                  const stat = studioStats.find((s) => s.id === studio.id);
+                  return {
+                    name:         studio.name,
+                    status:       studio.status,
+                    revenue:      stat ? formatRupiah(stat.omzet_live) : 'Rp 0',
+                    komisi:       stat ? formatRupiah(stat.komisi_bulan) : '-',
+                    cookiesStatus: studio.activeAccountsCount > 0 ? 'Aman' : 'Expired',
+                  };
+                })}
                 className="border-0 shadow-none rounded-none"
               />
               {studios.length === 0 && !isLoading && (

@@ -3,8 +3,10 @@ import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card'
 import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
+import { ToastContainer } from '../components/ui/Toast';
 import { HelpCircle, Trash2, Edit, Loader2, UserPlus, Users, ShoppingBag, Plus, X, Store } from 'lucide-react';
 import { fetchApi } from '../lib/api';
+import { useToast } from '../lib/useToast';
 
 const EMPTY_FORM = {
   tanggal:              new Date().toISOString().slice(0, 16),
@@ -28,7 +30,7 @@ export const InputMember = () => {
   const [isSaving, setIsSaving]         = useState(false);
   const [editId, setEditId]             = useState(null);
   const [deleteModal, setDeleteModal]   = useState({ open: false, member: null });
-  const [toast, setToast]               = useState(null);
+  const { toasts, addToast, removeToast } = useToast();
 
   // State Modal Tambah Akun Shopee
   const [accountModal, setAccountModal] = useState({ open: false, member: null });
@@ -37,11 +39,6 @@ export const InputMember = () => {
   const [newAccount, setNewAccount]     = useState({ shopee_username: '', shopee_shop_name: '' });
   const [isSavingAccount, setIsSavingAccount] = useState(false);
 
-  const showToast = (msg, type = 'success') => {
-    setToast({ msg, type });
-    setTimeout(() => setToast(null), 4000);
-  };
-
   // ---- Fetch semua member dari database ----
   const fetchMembers = useCallback(async () => {
     setIsLoading(true);
@@ -49,7 +46,7 @@ export const InputMember = () => {
       const data = await fetchApi('/api/members');
       setMembers(data);
     } catch (err) {
-      showToast('Gagal memuat data member: ' + err.message, 'error');
+      addToast('Gagal memuat data member: ' + err.message, 'error');
     } finally {
       setIsLoading(false);
     }
@@ -64,7 +61,7 @@ export const InputMember = () => {
       const data = await fetchApi(`/api/accounts/member/${memberId}`);
       setMemberAccounts(data);
     } catch (err) {
-      showToast('Gagal memuat akun: ' + err.message, 'error');
+      addToast('Gagal memuat akun: ' + err.message, 'error');
     } finally {
       setIsLoadingAccounts(false);
     }
@@ -86,7 +83,7 @@ export const InputMember = () => {
   const handleSaveAccount = async (e) => {
     e.preventDefault();
     if (!newAccount.shopee_username || !newAccount.shopee_shop_name) {
-      showToast('Username dan Nama Toko wajib diisi.', 'error');
+      addToast('Username dan Nama Toko wajib diisi.', 'error');
       return;
     }
     setIsSavingAccount(true);
@@ -99,11 +96,11 @@ export const InputMember = () => {
           shopee_shop_name: newAccount.shopee_shop_name,
         })
       });
-      showToast(`@${newAccount.shopee_username} berhasil didaftarkan! ✅`, 'success');
+      addToast(`@${newAccount.shopee_username} berhasil didaftarkan! ✅`, 'success');
       setNewAccount({ shopee_username: '', shopee_shop_name: '' });
       fetchMemberAccounts(accountModal.member.id);
     } catch (err) {
-      showToast(err.message, 'error');
+      addToast(err.message, 'error');
     } finally {
       setIsSavingAccount(false);
     }
@@ -114,10 +111,10 @@ export const InputMember = () => {
     if (!window.confirm(`Hapus akun @${username}?`)) return;
     try {
       await fetchApi(`/api/accounts/${accountId}`, { method: 'DELETE' });
-      showToast(`Akun @${username} dihapus.`, 'success');
+      addToast(`Akun @${username} dihapus.`, 'success');
       fetchMemberAccounts(accountModal.member.id);
     } catch (err) {
-      showToast(err.message, 'error');
+      addToast(err.message, 'error');
     }
   };
 
@@ -133,7 +130,7 @@ export const InputMember = () => {
   const handleSave = async (e) => {
     e.preventDefault();
     if (!formData.name || !formData.phone) {
-      showToast('Nama dan Nomor HP wajib diisi.', 'error');
+      addToast('Nama dan Nomor HP wajib diisi.', 'error');
       return;
     }
 
@@ -156,18 +153,18 @@ export const InputMember = () => {
       if (editId) {
         // Mode update
         await fetchApi(`/api/members/${editId}`, { method: 'PUT', body: JSON.stringify(payload) });
-        showToast('Data member berhasil diperbarui.', 'success');
+        addToast('Data member berhasil diperbarui.', 'success');
       } else {
         // Mode tambah baru
         await fetchApi('/api/members', { method: 'POST', body: JSON.stringify(payload) });
-        showToast('Member baru berhasil ditambahkan! 🎉', 'success');
+        addToast('Member baru berhasil ditambahkan! 🎉', 'success');
       }
 
       setFormData({ ...EMPTY_FORM, tanggal: new Date().toISOString().slice(0, 16) });
       setEditId(null);
       fetchMembers();
     } catch (err) {
-      showToast(err.message, 'error');
+      addToast(err.message, 'error');
     } finally {
       setIsSaving(false);
     }
@@ -202,11 +199,11 @@ export const InputMember = () => {
   const executeDelete = async () => {
     try {
       await fetchApi(`/api/members/${deleteModal.member.id}`, { method: 'DELETE' });
-      showToast('Member berhasil dihapus.', 'success');
+      addToast('Member berhasil dihapus.', 'success');
       setDeleteModal({ open: false, member: null });
       fetchMembers();
     } catch (err) {
-      showToast(err.message, 'error');
+      addToast(err.message, 'error');
       setDeleteModal({ open: false, member: null });
     }
   };
@@ -214,14 +211,8 @@ export const InputMember = () => {
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
 
-      {/* Toast Notification */}
-      {toast && (
-        <div className={`fixed bottom-6 right-6 z-50 px-5 py-3 rounded-xl shadow-2xl text-sm font-medium max-w-sm ${
-          toast.type === 'success' ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'
-        } animate-in slide-in-from-bottom-4`}>
-          {toast.msg}
-        </div>
-      )}
+      {/* Toast Notification via ToastContainer */}
+      <ToastContainer toasts={toasts} removeToast={removeToast} />
 
       {/* Header */}
       <div className="flex justify-between items-end">

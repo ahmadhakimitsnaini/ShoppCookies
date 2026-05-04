@@ -4,7 +4,9 @@ import { Card, CardContent } from '../components/ui/Card';
 import { Input, Select } from '../components/ui/Input';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
+import { ToastContainer } from '../components/ui/Toast';
 import { fetchApi } from '../lib/api';
+import { useToast } from '../lib/useToast';
 import { Search, Eye, ExternalLink, MonitorPlay, Plus, X, Loader2, Building2, Send, Settings2 } from 'lucide-react';
 
 export const ListStudio = () => {
@@ -18,7 +20,7 @@ export const ListStudio = () => {
   const [showModal, setShowModal]   = useState(false);
   const [studioName, setStudioName] = useState('');
   const [isSaving, setIsSaving]     = useState(false);
-  const [toast, setToast]           = useState(null);
+  const { toasts, addToast, removeToast } = useToast();
 
   // State Modal Telegram Settings
   const [showTgModal, setShowTgModal] = useState(false);
@@ -26,12 +28,6 @@ export const ListStudio = () => {
   const [tgToken, setTgToken]         = useState('');
   const [tgChatId, setTgChatId]       = useState('');
   const [isTesting, setIsTesting]     = useState(false);
-
-  const showToast = (msg, type = 'success') => {
-    setToast({ msg, type });
-    setTimeout(() => setToast(null), 4000);
-  };
-
   const fetchStudios = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -55,12 +51,12 @@ export const ListStudio = () => {
         method: 'POST',
         body: JSON.stringify({ name: studioName.trim() })
       });
-      showToast(`Studio "${studioName}" berhasil dibuat!`, 'success');
+      addToast(`Studio "${studioName}" berhasil dibuat!`, 'success');
       setStudioName('');
       setShowModal(false);
       fetchStudios();
     } catch (err) {
-      showToast(err.message || 'Gagal membuat studio.', 'error');
+      addToast(err.message || 'Gagal membuat studio.', 'error');
     } finally {
       setIsSaving(false);
     }
@@ -83,27 +79,27 @@ export const ListStudio = () => {
           telegram_chat_id: tgChatId
         })
       });
-      showToast('Konfigurasi Telegram berhasil disimpan!', 'success');
+      addToast('Konfigurasi Telegram berhasil disimpan!', 'success');
       setShowTgModal(false);
       fetchStudios();
     } catch (err) {
-      showToast(err.message || 'Gagal menyimpan konfigurasi.', 'error');
+      addToast(err.message || 'Gagal menyimpan konfigurasi.', 'error');
     } finally {
       setIsSaving(false);
     }
   };
 
   const testTelegram = async () => {
-    if (!tgToken || !tgChatId) return showToast('Isi Token & Chat ID dulu!', 'error');
+    if (!tgToken || !tgChatId) return addToast('Isi Token & Chat ID dulu!', 'error');
     setIsTesting(true);
     try {
       await fetchApi(`/api/studios/${activeStudio.id}/test-telegram`, {
         method: 'POST',
         body: JSON.stringify({ token: tgToken, chatId: tgChatId })
       });
-      showToast('Pesan test terkirim! Cek Telegram Anda.', 'success');
+      addToast('Pesan test terkirim! Cek Telegram Anda.', 'success');
     } catch (err) {
-      showToast(err.message || 'Gagal kirim pesan test.', 'error');
+      addToast(err.message || 'Gagal kirim pesan test.', 'error');
     } finally {
       setIsTesting(false);
     }
@@ -155,13 +151,8 @@ export const ListStudio = () => {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      {toast && (
-        <div className={`fixed bottom-6 right-6 z-[100] px-5 py-3 rounded-xl shadow-2xl text-sm font-medium ${
-          toast.type === 'success' ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'
-        } animate-in slide-in-from-bottom-4`}>
-          {toast.msg}
-        </div>
-      )}
+      {/* Toast via ToastContainer */}
+      <ToastContainer toasts={toasts} removeToast={removeToast} />
 
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end mb-6 gap-4">
         <div>
