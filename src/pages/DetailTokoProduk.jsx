@@ -368,6 +368,11 @@ export const DetailTokoProduk = () => {
                          <td className="px-4 py-4 text-center font-mono text-gray-400 border-r border-gray-50">{idx + 1}.</td>
                          <td className="px-4 py-4 border-r border-gray-50">
                             <div className="flex flex-col items-center">
+                               {prod.account_username && (
+                                   <span className="text-[9px] bg-indigo-100 text-indigo-700 font-bold px-1.5 py-0.5 rounded mb-1 uppercase tracking-wider">
+                                     @{prod.account_username}
+                                   </span>
+                                )}
                                <img src={prod.image} alt={prod.name} className="w-20 h-20 object-cover rounded shadow-sm border border-gray-100 mb-2" />
                                <p className="text-[10px] font-bold text-blue-600 text-center leading-tight hover:underline cursor-pointer">
                                   {prod.name}
