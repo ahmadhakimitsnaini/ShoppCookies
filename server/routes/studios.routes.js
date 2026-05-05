@@ -67,6 +67,7 @@ router.get('/', async (req, res) => {
       id: studio.id,
       name: studio.name,
       status: studio.status,
+      bank_category: studio.bank_category,
       activeAccountsCount: studio.shopee_accounts.filter(a => a.status === 'ACTIVE').length,
       // Aggregasi live sessions
       totalLiveSessions: studio.shopee_accounts.reduce((sum, account) => {
@@ -101,6 +102,45 @@ router.post('/', async (req, res) => {
   } catch (error) {
     console.error('Error creating studio:', error);
     res.status(500).json({ error: 'Gagal membuat studio.' });
+  }
+});
+
+/**
+ * DELETE /api/studios/:id
+ * Endpoint untuk menghapus studio beserta produk di dalamnya,
+ * dan melepaskan akun serta perangkat dari studio ini.
+ * Membutuhkan 'pin' untuk konfirmasi penghapusan.
+ */
+router.delete('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { pin } = req.body;
+
+    if (!pin) {
+      return res.status(400).json({ error: 'PIN Admin wajib diisi untuk menghapus Studio.' });
+    }
+
+    if (pin !== process.env.ADMIN_PIN) {
+      return res.status(401).json({ error: 'PIN Admin salah! Penghapusan dibatalkan.' });
+    }
+
+    // Gunakan transaksi agar penghapusan aman
+    await prisma.$transaction([
+      // 1. Lepaskan semua akun dari studio ini (studio_id bersifat nullable)
+      prisma.shopeeAccount.updateMany({
+        where: { studio_id: id },
+        data: { studio_id: null }
+      }),
+      // 2. Hapus studio (Device dan StudioProduct otomatis terhapus karena onDelete: Cascade di skema)
+      prisma.studio.delete({
+        where: { id }
+      })
+    ]);
+
+    res.status(200).json({ message: 'Studio berhasil dihapus permanen.' });
+  } catch (error) {
+    console.error('Error deleting studio:', error);
+    res.status(500).json({ error: 'Gagal menghapus studio.' });
   }
 });
 
@@ -155,6 +195,27 @@ router.patch('/:id/telegram', async (req, res) => {
     res.json({ success: true, data: updated });
   } catch (error) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * PATCH /api/studios/:id/bank-category
+ * Update kategori bank produk untuk studio
+ */
+router.patch('/:id/bank-category', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { bank_category } = req.body;
+
+    const updated = await prisma.studio.update({
+      where: { id },
+      data: { bank_category }
+    });
+
+    res.status(200).json({ message: 'Kategori Bank Produk berhasil diperbarui.', data: updated });
+  } catch (error) {
+    console.error('Error updating bank category:', error);
+    res.status(500).json({ error: 'Gagal memperbarui kategori bank produk.' });
   }
 });
 
@@ -283,7 +344,7 @@ router.get('/:id/metrics', async (req, res) => {
       where: { account_id: { in: accountIds }, status: 'LIVE' }
     });
 
-    res.json({ omzetTotal, komisiTotal, divalidasi, menungguDibayar, terbayar, activeAccounts, totalAccounts: accountIds.length });
+    res.json({ name: studio.name, omzetTotal, komisiTotal, divalidasi, menungguDibayar, terbayar, activeAccounts, totalAccounts: accountIds.length });
   } catch (error) {
     console.error('[Studios] /metrics error:', error);
     res.status(500).json({ error: error.message });
