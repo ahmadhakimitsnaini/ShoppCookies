@@ -1,4 +1,8 @@
-import { chromium, devices } from 'playwright';
+import { chromium } from 'playwright-extra';
+import { devices } from 'playwright';
+import stealthPlugin from 'puppeteer-extra-plugin-stealth';
+
+chromium.use(stealthPlugin());
 
 // ── Launch Args Hemat RAM ────────────────────────────────────────────────
 const RAM_SAVER_ARGS = [
