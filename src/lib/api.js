@@ -83,6 +83,12 @@ export const getTreatmentLogs = (params = {}) => {
   return fetchApi(`/api/treatment/logs${q ? `?${q}` : ''}`);
 };
 
+/** Simpan kumpulan URL ke Bank Produk */
+export const injectBankProduk = (data) =>
+  fetchApi('/api/bank/batch', { method: 'POST', body: JSON.stringify(data) });
+export const getBankStats = () =>
+  fetchApi('/api/bank/stats');
+
 /** Global search semua entitas */
 export const globalSearch = (q) =>
   fetchApi(`/api/search?q=${encodeURIComponent(q)}`);
@@ -90,6 +96,14 @@ export const globalSearch = (q) =>
 /** Daftar semua studio */
 export const getStudios = () =>
   fetchApi('/api/studios');
+
+// ============================================================
+// Studios API
+// ============================================================
+export const updateStudioTelegram = (id, data) => fetchApi(`/api/studios/${id}/telegram`, { method: 'PATCH', body: JSON.stringify(data) });
+export const testStudioTelegram = (id) => fetchApi(`/api/studios/${id}/test-telegram`, { method: 'POST' });
+export const updateStudioBankCategory = (id, category) => fetchApi(`/api/studios/${id}/bank-category`, { method: 'PATCH', body: JSON.stringify({ bank_category: category }) });
+export const deleteStudio = (id, pin) => fetchApi(`/api/studios/${id}`, { method: 'DELETE', body: JSON.stringify({ pin }) });
 
 // ============================================================
 // Devices (Manajemen Inventaris HP)

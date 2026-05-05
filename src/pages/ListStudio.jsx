@@ -7,7 +7,7 @@ import { Button } from '../components/ui/Button';
 import { ToastContainer } from '../components/ui/Toast';
 import { fetchApi } from '../lib/api';
 import { useToast } from '../lib/useToast';
-import { Search, Eye, ExternalLink, MonitorPlay, Plus, X, Loader2, Building2, Send, Settings2 } from 'lucide-react';
+import { Search, Eye, ExternalLink, MonitorPlay, Plus, X, Loader2, Building2, Send, Settings2, Trash2 } from 'lucide-react';
 
 export const ListStudio = () => {
   const navigate = useNavigate();
@@ -27,7 +27,15 @@ export const ListStudio = () => {
   const [activeStudio, setActiveStudio] = useState(null);
   const [tgToken, setTgToken]         = useState('');
   const [tgChatId, setTgChatId]       = useState('');
+  const [bankCategory, setBankCategory] = useState('');
   const [isTesting, setIsTesting]     = useState(false);
+
+  // State Modal Delete
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [studioToDelete, setStudioToDelete] = useState(null);
+  const [adminPin, setAdminPin] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
+
   const fetchStudios = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -66,6 +74,7 @@ export const ListStudio = () => {
     setActiveStudio(studio);
     setTgToken(studio.telegram_token || '');
     setTgChatId(studio.telegram_chat_id || '');
+    setBankCategory(studio.bank_category || '');
     setShowTgModal(true);
   };
 
@@ -79,7 +88,13 @@ export const ListStudio = () => {
           telegram_chat_id: tgChatId
         })
       });
-      addToast('Konfigurasi Telegram berhasil disimpan!', 'success');
+      if (bankCategory !== (activeStudio.bank_category || '')) {
+        await fetchApi(`/api/studios/${activeStudio.id}/bank-category`, {
+          method: 'PATCH',
+          body: JSON.stringify({ bank_category: bankCategory })
+        });
+      }
+      addToast('Konfigurasi Studio berhasil disimpan!', 'success');
       setShowTgModal(false);
       fetchStudios();
     } catch (err) {
@@ -102,6 +117,31 @@ export const ListStudio = () => {
       addToast(err.message || 'Gagal kirim pesan test.', 'error');
     } finally {
       setIsTesting(false);
+    }
+  };
+
+  const triggerDelete = (studio) => {
+    setStudioToDelete(studio);
+    setAdminPin('');
+    setShowDeleteModal(true);
+  };
+
+  const executeDeleteStudio = async () => {
+    if (!adminPin) return addToast("Masukkan PIN Admin terlebih dahulu.", "error");
+    
+    setIsDeleting(true);
+    try {
+      await fetchApi(`/api/studios/${studioToDelete.id}`, { 
+        method: 'DELETE',
+        body: JSON.stringify({ pin: adminPin })
+      });
+      addToast(`Studio "${studioToDelete.name}" berhasil dihapus permanen.`, 'success');
+      setShowDeleteModal(false);
+      fetchStudios();
+    } catch (err) {
+      addToast(err.message || 'Gagal menghapus studio. PIN salah?', 'error');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -145,6 +185,14 @@ export const ListStudio = () => {
           className="bg-emerald-600 hover:bg-emerald-700"
           onClick={() => navigate(`/list-studio/${row.id}`)}
         >Detail</Button>
+        <Button
+          variant="ghost" size="sm"
+          className="text-red-600 hover:bg-red-50"
+          onClick={() => triggerDelete(row)}
+          title="Hapus Studio"
+        >
+          <Trash2 size={16} />
+        </Button>
       </div>
     )}
   ];
@@ -249,7 +297,7 @@ export const ListStudio = () => {
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-white/20 rounded-lg"><Send size={24} /></div>
                 <div>
-                  <h2 className="text-xl font-bold">Konfigurasi Bot Studio</h2>
+                  <h2 className="text-xl font-bold">Konfigurasi Studio</h2>
                   <p className="text-blue-100 text-sm">Target: {activeStudio?.name}</p>
                 </div>
               </div>
@@ -279,6 +327,15 @@ export const ListStudio = () => {
                 onChange={e => setTgChatId(e.target.value)}
                 helperText="ID grup atau channel tempat bot akan memposting"
               />
+              <div className="pt-2 border-t border-gray-100">
+                <Input
+                  label="Kategori Bank Produk (Opsional)"
+                  placeholder="Contoh: kosmetik, baju_wanita"
+                  value={bankCategory}
+                  onChange={e => setBankCategory(e.target.value)}
+                  helperText="Jika diset, bot akan menimba produk dari kategori ini jika Brankas Studio kosong."
+                />
+              </div>
 
               <div className="flex flex-col sm:flex-row justify-between gap-4 pt-2">
                 <Button 
@@ -297,6 +354,40 @@ export const ListStudio = () => {
                     Simpan Perubahan
                   </Button>
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL KONFIRMASI HAPUS (PIN) */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm animate-in zoom-in-95 duration-200 overflow-hidden border border-red-100">
+            <div className="bg-red-50 p-6 flex flex-col items-center text-center">
+              <div className="h-16 w-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mb-4">
+                <Trash2 size={32} />
+              </div>
+              <h2 className="text-xl font-bold text-red-700">Hapus Permanen Studio</h2>
+              <p className="text-red-600/80 text-sm mt-2">
+                Menghapus <b>{studioToDelete?.name}</b> akan menghilangkan seluruh data brankas dan memutuskan tautan akun serta perangkat selamanya.
+              </p>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              <Input 
+                type="password"
+                label="Masukkan PIN Admin" 
+                placeholder="••••••" 
+                value={adminPin} 
+                onChange={e => setAdminPin(e.target.value)}
+                autoFocus
+              />
+              <div className="flex justify-between gap-3 pt-2">
+                <Button variant="ghost" className="w-full" onClick={() => setShowDeleteModal(false)}>Batal</Button>
+                <Button variant="primary" className="w-full bg-red-600 hover:bg-red-700 text-white" disabled={isDeleting} onClick={executeDeleteStudio}>
+                  {isDeleting ? <Loader2 className="animate-spin" size={18} /> : 'Hapus Studio'}
+                </Button>
               </div>
             </div>
           </div>
