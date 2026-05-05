@@ -126,6 +126,10 @@ model Studio {
   // Konfigurasi Bot Telegram per Studio
   telegram_token   String?         @db.VarChar(255)
   telegram_chat_id String?         @db.VarChar(100)
+  
+  // Kategori pengambilan dari Bank Produk (Opsional)
+  bank_category    String?         @db.VarChar(100)
+
   shopee_accounts  ShopeeAccount[]
   products         StudioProduct[]
   devices          Device[]
@@ -255,4 +259,13 @@ model Device {
   accounts     ShopeeAccount[] // 1 Device hanya boleh menampung 1 akun aktif (dikontrol via unique constraint logis di aplikasi)
 
   @@map("devices")
+}
+
+model ProductBank {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  category     String    @db.VarChar(100)
+  product_url  String    @db.Text
+  created_at   DateTime  @default(now()) @db.Timestamptz
+
+  @@map("product_banks")
 }

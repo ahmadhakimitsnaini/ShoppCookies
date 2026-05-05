@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card';
 import { Select, Textarea } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
+import { ToastContainer } from '../components/ui/Toast';
+import { useToast } from '../lib/useToast';
+import { injectBankProduk, getBankStats } from '../lib/api';
 import { AlertCircle, Link as LinkIcon, DatabaseZap } from 'lucide-react';
 
 export const InputDataBank = () => {
@@ -10,6 +13,9 @@ export const InputDataBank = () => {
   const [validUrlsCount, setValidUrlsCount] = useState(0);
   const [errorLines, setErrorLines] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [globalCount, setGlobalCount] = useState(0);
+
+  const { toasts, addToast, removeToast } = useToast();
 
   const kategoriOptions = [
     { value: '', label: 'Pilih Kategori Produk...' },
@@ -18,6 +24,20 @@ export const InputDataBank = () => {
     { value: 'gadget', label: 'Gadget & Elektronik' },
     { value: 'dekorasi', label: 'Dekorasi Rumah' },
   ];
+
+  const loadStats = async () => {
+    try {
+      const stats = await getBankStats();
+      const total = Object.values(stats).reduce((a, b) => a + b, 0);
+      setGlobalCount(total);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  useEffect(() => {
+    loadStats();
+  }, []);
 
   // Parse validation real-time
   useEffect(() => {
@@ -47,28 +67,35 @@ export const InputDataBank = () => {
     setErrorLines(errors);
   }, [urlsStr]);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!kategori) {
-      alert("Pilih kategori terlebih dahulu.");
-      return;
+      return addToast("Pilih kategori terlebih dahulu.", 'error');
     }
     if (errorLines.length > 0) {
-      alert("Terdapat format URL yang salah. Mohon perbaiki baris yang di-highlight merah.");
-      return;
+      return addToast("Terdapat format URL yang salah. Mohon perbaiki baris yang di-highlight merah.", 'error');
     }
     if (validUrlsCount === 0) return;
 
     setIsSubmitting(true);
-    setTimeout(() => {
-      setIsSubmitting(false);
+    try {
+      // Clean up URLs
+      const urls = urlsStr.split('\n').map(l => l.trim()).filter(l => l.includes('shopee.co.id') && l.length > 20);
+      
+      const res = await injectBankProduk({ category: kategori, urls });
+      addToast(res.message);
       setUrlsStr('');
-      alert(`${validUrlsCount} URL Produk Baru berhasil diamankan ke Bank Data Algoritma.`);
-    }, 1500);
+      loadStats();
+    } catch (err) {
+      addToast(err.message || 'Terjadi kesalahan saat menyimpan ke Database', 'error');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 max-w-4xl mx-auto mt-4">
+      <ToastContainer toasts={toasts} removeToast={removeToast} />
       <div className="mb-6">
         <h1 className="text-h2 font-bold text-gk-text-main flex items-center">
           Input Data Bank Produk <DatabaseZap className="ml-3 text-purple-500" />
@@ -78,7 +105,12 @@ export const InputDataBank = () => {
 
       <Card>
         <CardHeader className="bg-purple-50/50 border-b border-purple-100 flex justify-between flex-row items-center">
-           <CardTitle className="text-purple-900">Formulator Link Database</CardTitle>
+           <CardTitle className="text-purple-900">
+             Formulator Link Database
+             <span className="ml-3 text-xs font-normal text-purple-600 bg-purple-100 px-2 py-0.5 rounded-full border border-purple-200">
+               {globalCount} URL Tersimpan
+             </span>
+           </CardTitle>
            <span className="font-mono text-sm bg-purple-200 text-purple-800 px-3 py-1 rounded-full font-bold">
              {validUrlsCount} URL Terdeteksi
            </span>

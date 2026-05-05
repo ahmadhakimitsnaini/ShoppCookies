@@ -11,6 +11,7 @@ import memberRoutes from './routes/member.routes.js';
 import accountsRoutes from './routes/accounts.routes.js';
 import searchRoutes from './routes/search.routes.js';
 import devicesRoutes from './routes/devices.routes.js';
+import bankRoutes from './routes/bank.routes.js';
 import { startCronJobs } from './services/cron/jobScheduler.js';
 import { startTelegramBot } from './services/telegram/TelegramBot.js';
 import { startDynamicLiveObserver } from './services/bot/LiveController.js';
@@ -40,6 +41,7 @@ app.use('/api/members', memberRoutes);
 app.use('/api/accounts', accountsRoutes);
 app.use('/api/search', searchRoutes);
 app.use('/api/devices', devicesRoutes);
+app.use('/api/bank', bankRoutes);
 
 // Global Error Handler
 app.use((err, req, res, next) => {

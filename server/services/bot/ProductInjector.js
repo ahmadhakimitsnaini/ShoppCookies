@@ -1,4 +1,7 @@
-import { chromium } from 'playwright';
+import { chromium } from 'playwright-extra';
+import stealthPlugin from 'puppeteer-extra-plugin-stealth';
+
+chromium.use(stealthPlugin());
 import prisma from '../../db.js';
 
 // ============================================================
@@ -350,7 +353,11 @@ export const runProductInjection = async (idOrUsername, options = { clearEtalase
         ? { id: idOrUsername, deleted_at: null }
         : { shopee_username: idOrUsername, deleted_at: null },
       include: {
-        studio: { include: { products: { where: { account_id: null }, orderBy: { order_index: 'asc' } } } },
+        studio: { 
+          include: { 
+            products: { where: { account_id: null }, orderBy: { order_index: 'asc' } } 
+          }
+        },
         custom_products: { orderBy: { order_index: 'asc' } }, // Brankas Mandiri akun ini
         sessions: {
           where: { status: 'LIVE' },
@@ -361,6 +368,19 @@ export const runProductInjection = async (idOrUsername, options = { clearEtalase
     });
 
     if (singleAccount) {
+      let selectedProducts = singleAccount.use_custom_vault && singleAccount.custom_products?.length > 0 
+        ? singleAccount.custom_products 
+        : singleAccount.studio?.products || [];
+
+      // Fallback ke Bank Produk jika kosong
+      if (selectedProducts.length === 0 && singleAccount.studio?.bank_category) {
+        selectedProducts = await prisma.productBank.findMany({
+          where: { category: singleAccount.studio.bank_category },
+          take: 30
+        });
+      }
+
+      singleAccount.studio = { products: selectedProducts };
       targets = [singleAccount];
     } else if (isUuid) {
       // Coba cari sebagai Studio ID
@@ -390,22 +410,33 @@ export const runProductInjection = async (idOrUsername, options = { clearEtalase
         return { success: false, message: `Studio '${studio.name}' tidak memiliki akun aktif.` };
       }
 
-      if (studio.products.length === 0) {
-        return { success: false, message: `Studio '${studio.name}' belum memiliki daftar produk. Tambahkan produk terlebih dahulu.` };
+      let bankProducts = [];
+      if (studio.bank_category) {
+        bankProducts = await prisma.productBank.findMany({
+          where: { category: studio.bank_category },
+          take: 30
+        });
+      }
+
+      if (studio.products.length === 0 && bankProducts.length === 0) {
+        return { success: false, message: `Studio '${studio.name}' belum memiliki daftar produk dan Bank Produk kategori '${studio.bank_category}' kosong.` };
       }
 
       // === LOGIKA MASTER & OVERRIDE ===
-      // Tiap akun mendapat produk yang sesuai:
-      //   - Jika use_custom_vault = true  → pakai Brankas Mandiri akun (custom_products)
-      //   - Jika use_custom_vault = false → pakai Brankas Master Studio (studio.products)
       targets = studio.shopee_accounts.map(acc => {
         const useCustom = acc.use_custom_vault && acc.custom_products?.length > 0;
-        const selectedProducts = useCustom ? acc.custom_products : studio.products;
+        let selectedProducts = useCustom ? acc.custom_products : studio.products;
+
+        if (!useCustom && studio.products.length === 0 && bankProducts.length > 0) {
+          selectedProducts = bankProducts;
+        }
 
         if (useCustom) {
           console.log(`[Injector] 🔒 @${acc.shopee_username}: Menggunakan Brankas Mandiri (${selectedProducts.length} produk).`);
-        } else {
+        } else if (studio.products.length > 0) {
           console.log(`[Injector] 📦 @${acc.shopee_username}: Menggunakan Brankas Master Studio (${selectedProducts.length} produk).`);
+        } else {
+          console.log(`[Injector] 🌐 @${acc.shopee_username}: Menggunakan Bank Produk Kategori '${studio.bank_category}' (${selectedProducts.length} produk).`);
         }
 
         return {

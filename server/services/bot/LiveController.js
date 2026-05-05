@@ -12,7 +12,10 @@
  * dibandingkan meluncurkan browser baru untuk setiap akun.
  */
 
-import { chromium } from 'playwright';
+import { chromium } from 'playwright-extra';
+import stealthPlugin from 'puppeteer-extra-plugin-stealth';
+
+chromium.use(stealthPlugin());
 import prisma from '../../db.js';
 import { sendLiveChatNotification, broadcastMessage } from '../telegram/TelegramBot.js';
 

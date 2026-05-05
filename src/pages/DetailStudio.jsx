@@ -244,7 +244,7 @@ export const DetailStudio = () => {
             <h1 className="text-h2 font-bold text-gk-text-main flex items-center">
               Detail Studio <span className="text-gray-400 mx-2">|</span> ID: {id || '001'}
             </h1>
-            <p className="text-gk-text-muted mt-1">Kosmetik VIP - Budi Santoso</p>
+            <p className="text-gk-text-muted mt-1">{metrics?.name || 'Memuat data studio...'}</p>
           </div>
         </div>
         <div className="mt-4 sm:mt-0 flex space-x-2">
